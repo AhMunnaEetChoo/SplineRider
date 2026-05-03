@@ -9,7 +9,11 @@ the player is essentially a particle that 'rides' the spline with only 2 movemen
 
 ## launching from splines
 when reaching the end of the spline the player is launched - keeping the same exact spline tangent velocity at the end point of the spline.
+the same is true when travelling backward off the spine start point.
 the player can also launch from the spline at any time by pressing both directions at the same time.
+
+## attaching to splines
+when a player is in free flight and within a small radius of a spline AND the players trajectory lines up with the next splines tangent within a large tolerance the player will snap to the new spline continuing their dot prod speed along the new tangent. If the player is holding both directions (left and right) no attachment occurs.
 
 ## player in free flight (not riding spline)
 When the player is launched and free from the spline gravity acts freely accelerating player downward. the player still has some acceleration left and right but it is modified to be weaker. there is air drag.
