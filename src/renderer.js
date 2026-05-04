@@ -65,7 +65,7 @@ export class Renderer {
     this.scene.add(sprite);
   }
 
-  updateSplines(splines) {
+  updateSplines(splines, goalPosition) {
     // Clear old lines
     while (this.splineLines.children.length > 0) {
       const child = this.splineLines.children[0];
@@ -107,8 +107,8 @@ export class Renderer {
       this.startMarker.position.set(startPos.x, startPos.y, 0.02);
       this.scene.add(this.startMarker);
 
-      // Goal marker (yellow) at end of last spline
-      const endPos = splines[splines.length - 1].pointAt(1);
+      // Goal marker (yellow) at specified goal position
+      const endPos = goalPosition || splines[splines.length - 1].pointAt(1);
       const goalGeo = new THREE.RingGeometry(8, 14, 32);
       const goalMat = new THREE.MeshBasicMaterial({ color: '#ffe66d', side: THREE.DoubleSide });
       this.goalMarker = new THREE.Mesh(goalGeo, goalMat);

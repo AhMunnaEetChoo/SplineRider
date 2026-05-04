@@ -7,7 +7,7 @@ const input = new Input();
 const game = new Game();
 
 // Initial spline setup
-renderer.updateSplines(game.splines);
+renderer.updateSplines(game.splines, game.goalPosition);
 
 // Game clock
 let lastTime = performance.now();

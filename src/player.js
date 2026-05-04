@@ -5,6 +5,7 @@ export const State = {
   RIDING: 'riding',
   FREE_FLIGHT: 'freeFlight',
   DEAD: 'dead',
+  WIN: 'win',
 };
 
 const GRAVITY = 400;         // px/s² downward
@@ -65,7 +66,7 @@ export class Player {
   }
 
   update(deltaTime, input, splines) {
-    if (this.state === State.DEAD) return;
+    if (this.state === State.DEAD || this.state === State.WIN) return;
 
     // Tick down the launch buffer
     if (this.launchBuffer > 0) {
@@ -77,8 +78,7 @@ export class Player {
         this._updateRiding(deltaTime, input, splines);
         break;
       case State.FREE_FLIGHT:
-        this._updateFreeFlight(deltaTime);
-        this._checkSplineAttachment(splines, input);
+        this._updateFreeFlight(deltaTime, input, splines);
         break;
     }
 
@@ -186,34 +186,47 @@ export class Player {
     this.justLaunchedFrom = null;
   }
 
-  _updateFreeFlight(dt) {
-    // Gravity
-    this.velocity.y -= GRAVITY * dt;
-
-    // Air drag
-    this.velocity.x -= this.velocity.x * AIR_DRAG * dt;
-    this.velocity.y -= this.velocity.y * AIR_DRAG * dt;
-
-    this.position.x += this.velocity.x * dt;
-    this.position.y += this.velocity.y * dt;
+  // Simulate free-flight physics without mutating state.
+  // Returns { position, velocity } after dt seconds.
+  _simulateFreeFlight(startPos, startVel, dt) {
+    const endVelX = startVel.x - startVel.x * AIR_DRAG * dt;
+    const endVelY = startVel.y - GRAVITY * dt - startVel.y * AIR_DRAG * dt;
+    const avgVelX = (startVel.x + endVelX) * 0.5;
+    const avgVelY = (startVel.y + endVelY) * 0.5;
+    return {
+      position: new THREE.Vector2(
+        startPos.x + avgVelX * dt,
+        startPos.y + avgVelY * dt
+      ),
+      velocity: new THREE.Vector2(endVelX, endVelY),
+    };
   }
 
-  _checkSplineAttachment(splines, input) {
-    if (this.launchBuffer > 0) return;
+  _updateFreeFlight(dt, input, splines) {
+    // Early exits: no attachment check, just raw free flight
+    if (this.launchBuffer > 0) {
+      const result = this._simulateFreeFlight(this.position, this.velocity, dt);
+      this.position.copy(result.position);
+      this.velocity.copy(result.velocity);
+      return;
+    }
     const forward = input.isDown('ArrowRight') || input.isDown('d');
     const backward = input.isDown('ArrowLeft') || input.isDown('a');
-    if (forward && backward) return;
+    if (forward && backward) {
+      const result = this._simulateFreeFlight(this.position, this.velocity, dt);
+      this.position.copy(result.position);
+      this.velocity.copy(result.velocity);
+      return;
+    }
 
-    // Project motion ahead as a line segment
-    const lookahead = this.velocity.clone().normalize().multiplyScalar(
-      Math.max(this.velocity.length() * 0.15, 20)
-    );
+    // Project full trajectory for this frame
+    const projected = this._simulateFreeFlight(this.position, this.velocity, dt);
     const motionStart = this.position.clone();
-    const motionEnd = this.position.clone().add(lookahead);
+    const motionEnd = projected.position;
 
+    // Find closest spline intersection along the projected path
     let bestResult = null;
     let bestDist = Infinity;
-
     for (const spline of splines) {
       if (spline === this.justLaunchedFrom) continue;
       const result = this._intersectMotionWithSpline(motionStart, motionEnd, spline);
@@ -224,10 +237,22 @@ export class Player {
     }
 
     if (bestResult && bestDist > 1) {
+      // Frame split: intersection found ahead
+      const totalDist = motionStart.distanceTo(motionEnd);
+      const dt1 = totalDist > 0.0001 ? (bestDist / totalDist) * dt : 0;
+      const dtRemainder = dt - dt1;
+
+      // Apply free flight for dt1 (moves player to intersection point)
+      if (dt1 > 0.0001) {
+        const partial = this._simulateFreeFlight(this.position, this.velocity, dt1);
+        this.position.copy(partial.position);
+        this.velocity.copy(partial.velocity);
+      }
+
+      // Attach to the spline at intersection
       this.spline = bestResult.spline;
       this.t = bestResult.t;
       this.state = State.RIDING;
-
       const tangent = bestResult.spline.tangentAt(bestResult.t);
       const tlen = tangent.length();
       if (tlen > 0.0001) {
@@ -237,10 +262,17 @@ export class Player {
         this.speed = this.velocity.length();
       }
       this.justLaunchedFrom = null;
-      return;
-    }
 
-    this.justLaunchedFrom = null;
+      // Ride along the spline for the remainder of the frame
+      if (dtRemainder > 0.0001) {
+        this._updateRiding(dtRemainder, input, splines);
+      }
+    } else {
+      // No intersection — full free flight
+      this.position.copy(projected.position);
+      this.velocity.copy(projected.velocity);
+      this.justLaunchedFrom = null;
+    }
   }
 
   // Find where the player's motion line segment intersects a spline.
