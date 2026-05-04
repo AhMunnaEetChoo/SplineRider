@@ -199,51 +199,101 @@ export class Player {
   }
 
   _checkSplineAttachment(splines, input) {
-    // Don't attach while launch buffer is active or both directions held
     if (this.launchBuffer > 0) return;
     const forward = input.isDown('ArrowRight') || input.isDown('d');
     const backward = input.isDown('ArrowLeft') || input.isDown('a');
     if (forward && backward) return;
 
+    // Project motion ahead as a line segment
+    const lookahead = this.velocity.clone().normalize().multiplyScalar(
+      Math.max(this.velocity.length() * 0.15, 20)
+    );
+    const motionStart = this.position.clone();
+    const motionEnd = this.position.clone().add(lookahead);
+
+    let bestResult = null;
+    let bestDist = Infinity;
+
     for (const spline of splines) {
       if (spline === this.justLaunchedFrom) continue;
-      // Walk along the spline to find the closest point
-      const samples = 32;
-      let bestDist = Infinity;
-      let bestT = 0;
-
-      for (let i = 0; i <= samples; i++) {
-        const t = i / samples;
-        const pt = spline.pointAt(t);
-        const dist = this.position.distanceTo(pt);
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestT = t;
-        }
-      }
-
-      const attachDist = 30; // snap radius
-      if (bestDist < attachDist) {
-        // Attach to spline
-        this.spline = spline;
-        this.t = bestT;
-        this.state = State.RIDING;
-
-        // Project velocity onto tangent to preserve speed
-        const tangent = spline.tangentAt(bestT);
-        const tlen = tangent.length();
-        if (tlen > 0.0001) {
-          const tangentDir = tangent.clone().divideScalar(tlen);
-          this.speed = this.velocity.dot(tangentDir);
-        } else {
-          this.speed = this.velocity.length();
-        }
-        this.justLaunchedFrom = null;
-        return;
+      const result = this._intersectMotionWithSpline(motionStart, motionEnd, spline);
+      if (result && result.dist < bestDist) {
+        bestDist = result.dist;
+        bestResult = result;
       }
     }
-    // No attachment found — clear the exclusion
+
+    if (bestResult && bestDist > 1) {
+      this.spline = bestResult.spline;
+      this.t = bestResult.t;
+      this.state = State.RIDING;
+
+      const tangent = bestResult.spline.tangentAt(bestResult.t);
+      const tlen = tangent.length();
+      if (tlen > 0.0001) {
+        const tangentDir = tangent.clone().divideScalar(tlen);
+        this.speed = this.velocity.dot(tangentDir);
+      } else {
+        this.speed = this.velocity.length();
+      }
+      this.justLaunchedFrom = null;
+      return;
+    }
+
     this.justLaunchedFrom = null;
+  }
+
+  // Find where the player's motion line segment intersects a spline.
+  // Returns { spline, t, dist } for the closest intersection ahead, or null.
+  _intersectMotionWithSpline(motionStart, motionEnd, spline) {
+    const samples = 64;
+    let bestDist = Infinity;
+    let bestT = 0;
+
+    for (let i = 0; i < samples; i++) {
+      const t1 = i / samples;
+      const t2 = (i + 1) / samples;
+      const segStart = spline.pointAt(t1);
+      const segEnd = spline.pointAt(t2);
+
+      const hit = this._lineSegmentIntersection(
+        motionStart, motionEnd, segStart, segEnd
+      );
+
+      if (hit) {
+        const dist = motionStart.distanceTo(hit);
+        if (dist < bestDist) {
+          bestDist = dist;
+          const segLen = segStart.distanceTo(segEnd);
+          const frac = segLen > 0.0001 ? segStart.distanceTo(hit) / segLen : 0;
+          bestT = t1 + frac * (t2 - t1);
+        }
+      }
+    }
+
+    if (bestDist === Infinity) return null;
+    return { spline, t: bestT, dist: bestDist };
+  }
+
+  // 2D line-segment intersection. Returns the intersection point or null.
+  _lineSegmentIntersection(p1, p2, p3, p4) {
+    const d1x = p2.x - p1.x;
+    const d1y = p2.y - p1.y;
+    const d2x = p4.x - p3.x;
+    const d2y = p4.y - p3.y;
+    const cross = d1x * d2y - d1y * d2x;
+
+    if (Math.abs(cross) < 0.0001) return null; // parallel
+
+    const dx = p3.x - p1.x;
+    const dy = p3.y - p1.y;
+    const t = (dx * d2y - dy * d2x) / cross;
+    const u = (dx * d1y - dy * d1x) / cross;
+
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+      return new THREE.Vector2(p1.x + t * d1x, p1.y + t * d1y);
+    }
+    return null;
   }
 
   reset(spline) {
