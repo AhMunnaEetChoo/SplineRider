@@ -7,3 +7,10 @@
 
 # Logs
 *.log
+
+# Claude
+.claude/
+
+# Env
+.env
+.env.local

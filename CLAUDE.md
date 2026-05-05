@@ -22,26 +22,31 @@ There are no tests, no linter, no bundler.
 
 ```
 src/
-├── main.js       # Entry point: creates Renderer, Input, Game; runs the tick loop
-├── game.js       # Level data (hardcoded spline array), orchestrates update per frame
+├── main.js       # Entry point: screen state machine, composed input, game loop
+├── game.js       # Level-data-driven orchestrator with callbacks (onWin, onDeath, etc.)
 ├── player.js     # All player physics: riding, free flight, launch, attachment
 ├── spline.js     # Cubic Bezier math: pointAt, tangentAt, paramDelta, arc length
-├── renderer.js   # Three.js scene setup, spline rendering, camera follow
-└── input.js      # Keyboard state tracking with justPressed support
+├── renderer.js   # Three.js scene setup, dual-mode (game/editor) rendering
+├── input.js      # Keyboard state tracking with justPressed support
+├── touch.js      # Mobile touch controls (same interface as input.js)
+├── ui.js         # DOM screen manager (start, win, death, pause, level select, editor toolbar)
+├── editor.js     # Click-and-drag level editor (canvas mouse/touch handlers)
+├── storage.js    # localStorage CRUD for levels and best times
+├── levels.js     # Built-in level catalog (plain data, not Spline instances)
+└── effects.js    # Particle effects system (THREE.Points + additive blending)
 ```
 
-**Module dependency order:** `spline.js` and `input.js` have no internal deps. `player.js` imports `spline.js`. `renderer.js` is standalone. `game.js` imports `player.js` and `spline.js`. `main.js` wires everything together by importing `renderer.js`, `input.js`, and `game.js`.
-
-**Avoid circular imports** — `main.js` is the root; nothing should import from it.
+**Module dependency order:** `spline.js` and `input.js` have no internal deps. `player.js` imports `spline.js`. `renderer.js` imports `spline.js`. `game.js` imports `player.js`, `spline.js`, and `levels.js`. `editor.js` is standalone. `main.js` wires everything together — nothing imports from `main.js`.
 
 ## Key design details
 
-- **Physics are hand-rolled** — no physics engine. Gravity, drag, and acceleration are applied directly each frame.
+- **Physics are hand-rolled** — no physics engine. Gravity (400 px/s²), drag (0.3 riding, 0.15 air), and acceleration (6000 px/s² riding, 4000 px/s² air) are applied directly each frame.
 - **Spline riding** uses a scalar speed along the parametric curve. `paramDelta(t, speed, dt)` converts speed to a t-step by dividing by tangent magnitude.
 - **Launch** transitions the player from RIDING to FREE_FLIGHT, converting scalar speed to a velocity vector along the spline's tangent direction.
-- **Attachment** has two paths:
-  - **Direct transfer** (new): when a spline endpoint physically connects to another spline's start/end with a matching tangent, the player transfers without entering free flight — speed is preserved continuously.
-  - **Proximity snap** (fallback): during free flight, the nearest point on nearby splines is sampled (32 samples each). If within 30px, the player's velocity is dot-projected onto the spline tangent to compute new scalar speed.
-- **The world is 2D** but built on Three.js for potential visual effects. The orthographic camera looks down the Z axis; everything lives at z=0.
-- **Levels are hardcoded** in `game.js` as an array of `Spline` objects. No level editor or serialization exists yet.
-- **The goal** (end of the last spline) is rendered but has no win-detection logic.
+- **Attachment** uses trajectory-intersection: the player's projected motion line is tested against spline segments for line-segment intersection. Frame-splitting applies partial free flight until intersection, then attaches and rides the remainder.
+- **Direct transfer**: when a spline endpoint physically connects to another spline's start/end with a matching tangent (dot > 0.85), the player transfers without entering free flight.
+- **The world is 2D** but built on Three.js for rendering. The orthographic camera looks down the Z axis; everything lives at z=0.
+- **Levels are stored** as plain data (`{name, splines: [{p0,p1,p2,p3}], startSplineIndex, startT, goalPosition}`) and deserialized to Spline instances at load time.
+- **The renderer has two modes**: game view (merged continuous spline line) and editor view (per-spline rendering with control points, handle lines, and markers).
+- **Input is composed**: keyboard + touch wrapped into a single input provider with matching `isDown` interface.
+- **Screens**: START → PLAY | EDITOR | LEVEL_SELECT. PLAY → WIN | DEATH | PAUSE. Editor has test-play mode that returns to editor on win/death.

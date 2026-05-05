@@ -6,7 +6,7 @@
   <title>Spline Rider</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; touch-action: manipulation; }
     canvas { display: block; }
     #ui {
       position: absolute;
@@ -26,6 +26,17 @@
     <div id="state">State: idle</div>
   </div>
   <div id="win-message" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#ffe66d; font-family:monospace; font-size:48px; pointer-events:none; text-shadow:0 0 20px #ffe66d;">You Win!</div>
+  <script>
+    window.addEventListener('error', function(e) {
+      if (e.target.tagName === 'SCRIPT' && e.target.src && e.target.src.includes('unpkg.com')) {
+        var msg = document.createElement('div');
+        msg.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#ff6b6b;font-family:monospace;font-size:16px;text-align:center;max-width:80%;';
+        msg.textContent = 'Failed to load game assets. Please check your internet connection and try again.';
+        document.body.appendChild(msg);
+        document.getElementById('ui').style.display = 'none';
+      }
+    }, true);
+  </script>
   <script type="importmap">
     {
       "imports": {

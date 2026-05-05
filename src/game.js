@@ -1,67 +1,66 @@
 import * as THREE from 'three';
 import { Spline } from './spline.js';
 import { Player, State } from './player.js';
+import { DEFAULT_LEVEL } from './levels.js';
 
-const LEVEL_SPLINES = [
-  // Main connected track
-  new Spline(
-    new THREE.Vector2(-500, 200),
-    new THREE.Vector2(-300, 200),
-    new THREE.Vector2(-100, -300),
-    new THREE.Vector2(0, -100)
-  ),
-  new Spline(
-    new THREE.Vector2(0, -100),
-    new THREE.Vector2(100, 50),
-    new THREE.Vector2(200, 300),
-    new THREE.Vector2(300, 250)
-  ),
-  new Spline(
-    new THREE.Vector2(300, 250),
-    new THREE.Vector2(400, 200),
-    new THREE.Vector2(500, -150),
-    new THREE.Vector2(600, -200)    // Goal at end of this spline
-  ),
-  // Disconnected splines for testing jump-between-splines
-  new Spline(
-    new THREE.Vector2(450, 150),
-    new THREE.Vector2(480, 150),
-    new THREE.Vector2(520, 150),
-    new THREE.Vector2(550, 150)
-  ),
-  new Spline(
-    new THREE.Vector2(700, -300),
-    new THREE.Vector2(750, -350),
-    new THREE.Vector2(850, -350),
-    new THREE.Vector2(900, -300)
-  ),
-  new Spline(
-    new THREE.Vector2(100, 350),
-    new THREE.Vector2(150, 400),
-    new THREE.Vector2(250, 400),
-    new THREE.Vector2(300, 350)
-  ),
-];
+const WIN_RADIUS = 40;
 
-const GOAL_SPLINE_INDEX = 2;
+function _deserializeSplines(splineDataArray) {
+  return splineDataArray.map(s => new Spline(
+    new THREE.Vector2(s.p0.x, s.p0.y),
+    new THREE.Vector2(s.p1.x, s.p1.y),
+    new THREE.Vector2(s.p2.x, s.p2.y),
+    new THREE.Vector2(s.p3.x, s.p3.y),
+  ));
+}
 
 export class Game {
-  constructor() {
-    this.splines = LEVEL_SPLINES;
-    this.player = new Player(this.splines[0]);
-    this.goalPosition = this.splines[GOAL_SPLINE_INDEX].pointAt(1);
+  constructor(levelData) {
     this.elapsedTime = 0;
+    this._lastState = null;
+    this._deathFired = false;
+
+    // Callbacks (set by main.js)
+    this.onWin = null;
+    this.onDeath = null;
+    this.onStateChange = null;
+    this.onReset = null;
+
+    this.loadLevel(levelData || DEFAULT_LEVEL);
+  }
+
+  loadLevel(levelData) {
+    this.levelData = levelData;
+    this.splines = _deserializeSplines(levelData.splines);
+    this.goalPosition = new THREE.Vector2(
+      levelData.goalPosition.x, levelData.goalPosition.y
+    );
+
+    const startIdx = Math.min(levelData.startSplineIndex || 0, this.splines.length - 1);
+    this.player = new Player(this.splines[startIdx]);
+    this.player.t = levelData.startT || 0;
+
+    this.elapsedTime = 0;
+    this._lastState = this.player.state;
+    this._deathFired = false;
   }
 
   update(deltaTime, input) {
     // Reset
     if (input.consumeJustPressed('r')) {
-      this.player.reset(this.splines[0]);
-      this.elapsedTime = 0;
-      document.getElementById('win-message').style.display = 'none';
+      this.loadLevel(this.levelData);
+      if (this.onReset) this.onReset();
+      return;
     }
 
     this.player.update(deltaTime, input, this.splines);
+
+    // Detect state changes
+    const prevState = this._lastState;
+    this._lastState = this.player.state;
+    if (prevState !== this.player.state && this.onStateChange) {
+      this.onStateChange(this.player.state);
+    }
 
     // Timer: accumulate only during active gameplay
     if (this.player.state !== State.DEAD && this.player.state !== State.WIN) {
@@ -71,25 +70,16 @@ export class Game {
     // Win detection
     if (this.player.state !== State.DEAD && this.player.state !== State.WIN) {
       const dist = this.player.getPosition().distanceTo(this.goalPosition);
-      if (dist < 40) {
+      if (dist < WIN_RADIUS) {
         this.player.state = State.WIN;
-        document.getElementById('win-message').style.display = 'block';
+        if (this.onWin) this.onWin(this.elapsedTime);
       }
     }
 
-    // Update UI
-    document.getElementById('timer').textContent =
-      `Time: ${this.elapsedTime.toFixed(2)}s`;
-    document.getElementById('speed').textContent =
-      `Speed: ${Math.abs(this.player.getSpeed()).toFixed(0)}`;
-    document.getElementById('state').textContent =
-      `State: ${this.player.getState()}`;
-
-    if (this.player.state === State.DEAD) {
-      document.getElementById('state').textContent = 'State: DEAD (press R)';
-    }
-    if (this.player.state === State.WIN) {
-      document.getElementById('state').textContent = 'State: WIN!';
+    // Death detection
+    if (this.player.state === State.DEAD && !this._deathFired) {
+      this._deathFired = true;
+      if (this.onDeath) this.onDeath();
     }
   }
 }

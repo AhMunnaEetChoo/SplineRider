@@ -11,8 +11,8 @@ export const State = {
 const GRAVITY = 400;         // px/s² downward
 const SPLINE_DRAG = 0.3;     // drag coefficient while riding
 const AIR_DRAG = 0.15;       // drag coefficient in free flight
-const AIR_ACCEL = 400;       // weak horizontal accel in air (px/s²)
-const ACCELERATION = 600;    // accel along spline (px/s²)
+const AIR_ACCEL = 4000;       // weak horizontal accel in air (px/s²)
+const ACCELERATION = 6000;    // accel along spline (px/s²)
 const WORLD_BOTTOM = -600;   // below this = death
 const LAUNCH_BUFFER = 0.5;  // seconds before re-attaching after manual launch
 
@@ -217,6 +217,14 @@ export class Player {
       this.position.copy(result.position);
       this.velocity.copy(result.velocity);
       return;
+    }
+
+    // Air acceleration (horizontal only)
+    if (forward) {
+      this.velocity.x += AIR_ACCEL * dt;
+    }
+    if (backward) {
+      this.velocity.x -= AIR_ACCEL * dt;
     }
 
     // Project full trajectory for this frame
