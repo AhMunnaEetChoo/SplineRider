@@ -79,9 +79,13 @@ export function importLevelJson(jsonString) {
   }
   for (let i = 0; i < data.splines.length; i++) {
     const s = data.splines[i];
-    for (const pt of ['p0', 'p1', 'p2', 'p3']) {
-      if (!s[pt] || typeof s[pt].x !== 'number' || typeof s[pt].y !== 'number') {
-        throw new Error(`Invalid level data: spline ${i} missing ${pt}`);
+    if (!Array.isArray(s.points) || s.points.length < 2) {
+      throw new Error(`Invalid level data: spline ${i} missing or too few points`);
+    }
+    for (let j = 0; j < s.points.length; j++) {
+      const p = s.points[j];
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
+        throw new Error(`Invalid level data: spline ${i} point ${j} invalid`);
       }
     }
   }
@@ -91,7 +95,8 @@ export function importLevelJson(jsonString) {
   }
   if (!data.goalPosition || typeof data.goalPosition.x !== 'number' || typeof data.goalPosition.y !== 'number') {
     const last = data.splines[data.splines.length - 1];
-    data.goalPosition = { x: last.p3.x, y: last.p3.y };
+    const lastPt = last.points[last.points.length - 1];
+    data.goalPosition = { x: lastPt.x, y: lastPt.y };
   }
   if (!data.name) {
     data.name = 'Imported Level';

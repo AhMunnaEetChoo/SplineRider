@@ -14,6 +14,12 @@ const input = new Input();
 const touchInput = new TouchInput();
 const ui = new UIManager();
 const editor = new Editor(renderer);
+editor.onSelectionChange = (splineIndex) => {
+  ui.setDeleteEnabled(splineIndex !== -1);
+};
+editor.onModeChange = (mode) => {
+  ui.setModeLabel(mode);
+};
 const effects = new Effects(renderer.scene);
 const game = new Game();
 
@@ -42,6 +48,7 @@ const SCREENS = { START: 'start', PLAY: 'play', EDITOR: 'editor', LEVELS: 'level
 let currentScreen = SCREENS.START;
 let currentLevelData = DEFAULT_LEVEL;
 let isTestPlay = false;
+let _savedEditorCamera = null;
 
 function showScreen(id, data) {
   currentScreen = id;
@@ -55,6 +62,16 @@ function showScreen(id, data) {
   }
 }
 
+function _restoreEditorCamera() {
+  if (_savedEditorCamera) {
+    renderer.camera.position.set(
+      _savedEditorCamera.x,
+      _savedEditorCamera.y,
+      _savedEditorCamera.z,
+    );
+  }
+}
+
 // ---- Game Callbacks ----
 
 game.onWin = (time) => {
@@ -65,6 +82,7 @@ game.onWin = (time) => {
   if (isTestPlay) {
     // Brief pause then return to editor
     setTimeout(() => {
+      _restoreEditorCamera();
       showScreen('editor');
       isTestPlay = false;
     }, 1500);
@@ -78,6 +96,7 @@ game.onDeath = () => {
   effects.emitDeath(game.player.getPosition());
   if (isTestPlay) {
     setTimeout(() => {
+      _restoreEditorCamera();
       showScreen('editor');
       isTestPlay = false;
     }, 1000);
@@ -159,8 +178,8 @@ ui.on('btn-pause-menu', () => {
 });
 
 // Editor toolbar
-ui.on('btn-add-spline', () => {
-  editor.addSpline();
+ui.on('btn-toggle-mode', () => {
+  editor.toggleMode();
 });
 
 ui.on('btn-delete-spline', () => {
@@ -232,6 +251,11 @@ ui.on('btn-import-level', () => {
 ui.on('btn-test-level', () => {
   const data = editor.getLevelData();
   data.name = data.name || 'Test Level';
+  _savedEditorCamera = {
+    x: renderer.camera.position.x,
+    y: renderer.camera.position.y,
+    z: renderer.camera.position.z,
+  };
   currentLevelData = data;
   isTestPlay = true;
   game.loadLevel(data);
@@ -310,6 +334,9 @@ function tick() {
     renderer.updatePlayer(game.player);
     effects.update(dt);
   } else if (currentScreen === 'editor') {
+    if (input.consumeJustPressed(' ')) {
+      editor.toggleMode();
+    }
     editor.update();
   }
 

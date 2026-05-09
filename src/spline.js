@@ -1,51 +1,57 @@
 import * as THREE from 'three';
 
-// Cubic Bezier spline — single segment
+// Catmull-Rom spline — multi-segment path defined by through-points
 export class Spline {
-  constructor(p0, p1, p2, p3) {
-    this.p0 = p0.clone();
-    this.p1 = p1.clone();
-    this.p2 = p2.clone();
-    this.p3 = p3.clone();
+  constructor(points) {
+    this.points = points.map(p => p.clone());
+    this._buildArcLengthTable(200);
   }
 
-  // Evaluate position at parameter t (0..1)
+  get numSegments() {
+    return Math.max(1, this.points.length - 1);
+  }
+
+  _getSegmentControlPoints(segIndex) {
+    const i = segIndex;
+    const prev = this.points[Math.max(0, i - 1)];
+    const curr = this.points[i];
+    const next = this.points[i + 1];
+    const next2 = this.points[Math.min(this.points.length - 1, i + 2)];
+    return { prev, curr, next, next2 };
+  }
+
+  _segmentAndLocalT(t) {
+    const clamped = Math.max(0, Math.min(1, t));
+    const segT = clamped * this.numSegments;
+    const segIndex = Math.min(Math.floor(segT), this.numSegments - 1);
+    const localT = segT - segIndex;
+    return { segIndex, localT };
+  }
+
   pointAt(t) {
-    const t1 = 1 - t;
-    const t1_2 = t1 * t1;
-    const t1_3 = t1_2 * t1;
-    const t2 = t * t;
-    const t3 = t2 * t;
-
-    return new THREE.Vector2(
-      t1_3 * this.p0.x + 3 * t1_2 * t * this.p1.x + 3 * t1 * t2 * this.p2.x + t3 * this.p3.x,
-      t1_3 * this.p0.y + 3 * t1_2 * t * this.p1.y + 3 * t1 * t2 * this.p2.y + t3 * this.p3.y
-    );
-  }
-
-  // Evaluate tangent (derivative) at parameter t
-  tangentAt(t) {
-    const t1 = 1 - t;
-    const t1_2 = t1 * t1;
-    const t2 = t * t;
-
-    return new THREE.Vector2(
-      3 * t1_2 * (this.p1.x - this.p0.x) + 6 * t1 * t * (this.p2.x - this.p1.x) + 3 * t2 * (this.p3.x - this.p2.x),
-      3 * t1_2 * (this.p1.y - this.p0.y) + 6 * t1 * t * (this.p2.y - this.p1.y) + 3 * t2 * (this.p3.y - this.p2.y)
-    );
-  }
-
-  // Sample points along the spline for rendering
-  samplePoints(count = 64) {
-    const points = [];
-    for (let i = 0; i <= count; i++) {
-      const p = this.pointAt(i / count);
-      points.push(p);
+    if (this.points.length < 2) {
+      return this.points.length === 1 ? this.points[0].clone() : new THREE.Vector2();
     }
-    return points;
+    const { segIndex, localT } = this._segmentAndLocalT(t);
+    const { prev, curr, next, next2 } = this._getSegmentControlPoints(segIndex);
+    return _catmullRomPoint(prev, curr, next, next2, localT);
   }
 
-  // Build a Three.js line geometry from sampled points
+  tangentAt(t) {
+    if (this.points.length < 2) return new THREE.Vector2(1, 0);
+    const { segIndex, localT } = this._segmentAndLocalT(t);
+    const { prev, curr, next, next2 } = this._getSegmentControlPoints(segIndex);
+    return _catmullRomTangent(prev, curr, next, next2, localT);
+  }
+
+  samplePoints(count = 64) {
+    const pts = [];
+    for (let i = 0; i <= count; i++) {
+      pts.push(this.pointAt(i / count));
+    }
+    return pts;
+  }
+
   createLineGeometry(count = 64) {
     const sampled = this.samplePoints(count);
     const verts = [];
@@ -57,7 +63,6 @@ export class Spline {
     return geo;
   }
 
-  // Compute arc length (approximate via sampling)
   arcLength(samples = 100) {
     let len = 0;
     let prev = this.pointAt(0);
@@ -69,12 +74,65 @@ export class Spline {
     return len;
   }
 
-  // Convert arc length speed delta to parameter delta
-  // dt ≈ speed * deltaTime / |tangent(t)|
-  paramDelta(t, speed, deltaTime) {
-    const tangent = this.tangentAt(t);
-    const tlen = tangent.length();
-    if (tlen < 0.0001) return 0;
-    return (speed * deltaTime) / tlen;
+  _buildArcLengthTable(samples) {
+    this._arcTable = [{ t: 0, s: 0 }];
+    let prev = this.pointAt(0);
+    let cumLen = 0;
+    for (let i = 1; i <= samples; i++) {
+      const t = i / samples;
+      const curr = this.pointAt(t);
+      cumLen += prev.distanceTo(curr);
+      this._arcTable.push({ t, s: cumLen });
+      prev = curr;
+    }
   }
+
+  paramDelta(t, speed, deltaTime) {
+    if (this.points.length < 2) return 0;
+    const ds = speed * deltaTime;
+    const totalLen = this._arcTable[this._arcTable.length - 1].s;
+    if (totalLen < 0.0001) return 0;
+    const idx = t * (this._arcTable.length - 1);
+    const i = Math.min(Math.floor(idx), this._arcTable.length - 2);
+    const frac = idx - i;
+    const segDS = this._arcTable[i + 1].s - this._arcTable[i].s;
+    const segDT = this._arcTable[i + 1].t - this._arcTable[i].t;
+    const dsdt = segDT > 0 ? segDS / segDT : 0.0001;
+    return ds / dsdt;
+  }
+
+  getStartPoint() {
+    return this.points[0].clone();
+  }
+
+  getEndPoint() {
+    return this.points[this.points.length - 1].clone();
+  }
+
+  getStartTangent() {
+    return this.tangentAt(0);
+  }
+
+  getEndTangent() {
+    return this.tangentAt(1);
+  }
+}
+
+// Catmull-Rom position: given 4 control points, evaluate at localT (0..1)
+function _catmullRomPoint(P0, P1, P2, P3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return new THREE.Vector2(
+    0.5 * (2 * P1.x + (-P0.x + P2.x) * t + (2 * P0.x - 5 * P1.x + 4 * P2.x - P3.x) * t2 + (-P0.x + 3 * P1.x - 3 * P2.x + P3.x) * t3),
+    0.5 * (2 * P1.y + (-P0.y + P2.y) * t + (2 * P0.y - 5 * P1.y + 4 * P2.y - P3.y) * t2 + (-P0.y + 3 * P1.y - 3 * P2.y + P3.y) * t3),
+  );
+}
+
+// Catmull-Rom tangent (derivative)
+function _catmullRomTangent(P0, P1, P2, P3, t) {
+  const t2 = t * t;
+  return new THREE.Vector2(
+    0.5 * ((-P0.x + P2.x) + 2 * (2 * P0.x - 5 * P1.x + 4 * P2.x - P3.x) * t + 3 * (-P0.x + 3 * P1.x - 3 * P2.x + P3.x) * t2),
+    0.5 * ((-P0.y + P2.y) + 2 * (2 * P0.y - 5 * P1.y + 4 * P2.y - P3.y) * t + 3 * (-P0.y + 3 * P1.y - 3 * P2.y + P3.y) * t2),
+  );
 }

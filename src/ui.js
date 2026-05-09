@@ -85,7 +85,7 @@ export class UIManager {
 
     // Editor Toolbar
     this.editorToolbar = el('div', { id: 'editor-toolbar', style: `display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%); gap:6px; z-index:5; pointer-events:all;` },
-      btn('+ Spline', 'btn-add-spline'),
+      btn('Pan', 'btn-toggle-mode'),
       btn('- Spline', 'btn-delete-spline'),
       btn('Save', 'btn-save-level'),
       btn('Load', 'btn-load-level'),
@@ -101,6 +101,7 @@ export class UIManager {
       b.style.minWidth = 'auto';
     });
     document.body.appendChild(this.editorToolbar);
+    document.getElementById('btn-delete-spline').disabled = true;
 
     // Import modal
     this._importModal = el('div', { style: `display:none; position:absolute; top:0; left:0; width:100%; height:100%; z-index:20; pointer-events:all;` },
@@ -248,6 +249,16 @@ export class UIManager {
     if (name && name.trim()) {
       callback(name.trim());
     }
+  }
+
+  setDeleteEnabled(enabled) {
+    const btn = document.getElementById('btn-delete-spline');
+    if (btn) btn.disabled = !enabled;
+  }
+
+  setModeLabel(mode) {
+    const btn = document.getElementById('btn-toggle-mode');
+    if (btn) btn.textContent = (mode === 'draw') ? 'Pan' : 'Draw';
   }
 
   updateHUD() {

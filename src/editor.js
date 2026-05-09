@@ -1,6 +1,11 @@
-// Level editor — canvas mouse/touch handling, control-point dragging, toolbar actions.
+// Level editor — Catmull-Rom splines with pencil-draw, knot dragging, and selection.
+
+import * as THREE from 'three';
+import { Spline } from './spline.js';
 
 const HIT_RADIUS = 15;
+const CURVE_HIT_RADIUS = 12;
+const DRAW_MIN_DIST = 25;
 
 export class Editor {
   constructor(renderer) {
@@ -14,12 +19,16 @@ export class Editor {
 
     // Selection / interaction state
     this.selectedSplineIndex = -1;
-    this.selectedPointIndex = -1;
     this.dragState = null;
     this.mouseWorld = { x: 0, y: 0 };
+    this.mode = 'draw';       // 'draw' | 'pan'
     this._active = false;
 
-    // Bound handlers for add/remove
+    // Callbacks (set by main.js)
+    this.onSelectionChange = null;
+    this.onModeChange = null;
+
+    // Bound handlers
     this._onMouseDown = this._onMouseDown.bind(this);
     this._onMouseMove = this._onMouseMove.bind(this);
     this._onMouseUp = this._onMouseUp.bind(this);
@@ -30,26 +39,22 @@ export class Editor {
 
   initNewLevel() {
     this.splines = [{
-      p0: { x: -200, y: 0 },
-      p1: { x: -66, y: 0 },
-      p2: { x: 66, y: 0 },
-      p3: { x: 200, y: 0 },
+      points: [
+        { x: -200, y: 0 },
+        { x: 200, y: 0 },
+      ],
     }];
     this.startSplineIndex = 0;
     this.startT = 0;
     this.goalPosition = { x: 200, y: 0 };
     this.selectedSplineIndex = -1;
-    this.selectedPointIndex = -1;
     this.dragState = null;
     this._rebuildView();
   }
 
   loadLevel(levelData) {
     this.splines = levelData.splines.map(s => ({
-      p0: { x: s.p0.x, y: s.p0.y },
-      p1: { x: s.p1.x, y: s.p1.y },
-      p2: { x: s.p2.x, y: s.p2.y },
-      p3: { x: s.p3.x, y: s.p3.y },
+      points: s.points.map(p => ({ x: p.x, y: p.y })),
     }));
     this.startSplineIndex = levelData.startSplineIndex || 0;
     this.startT = levelData.startT || 0;
@@ -58,7 +63,6 @@ export class Editor {
       y: levelData.goalPosition.y,
     };
     this.selectedSplineIndex = -1;
-    this.selectedPointIndex = -1;
     this.dragState = null;
     this._rebuildView();
   }
@@ -98,17 +102,32 @@ export class Editor {
     this.dragState = null;
   }
 
+  toggleMode() {
+    this.mode = (this.mode === 'draw') ? 'pan' : 'draw';
+    this.dragState = null;
+    if (this.onModeChange) this.onModeChange(this.mode);
+  }
+
   update() {
     if (!this._active || !this.dragState) return;
 
     const m = this.mouseWorld;
     const ds = this.dragState;
 
-    if (ds.type === 'controlPoint') {
+    if (ds.type === 'knot') {
       const s = this.splines[ds.splineIndex];
-      s['p' + ds.pointIndex].x = m.x;
-      s['p' + ds.pointIndex].y = m.y;
+      s.points[ds.pointIndex].x = m.x;
+      s.points[ds.pointIndex].y = m.y;
       this.renderer.updateEditorSplineGeometry(ds.splineIndex, s);
+    } else if (ds.type === 'drawing') {
+      const s = this.splines[ds.splineIndex];
+      const last = s.points[s.points.length - 1];
+      const dx = m.x - last.x;
+      const dy = m.y - last.y;
+      if (Math.sqrt(dx * dx + dy * dy) >= DRAW_MIN_DIST) {
+        s.points.push({ x: m.x, y: m.y });
+        this.renderer.updateEditorSplineGeometry(ds.splineIndex, s);
+      }
     } else if (ds.type === 'start') {
       const result = this._snapToNearestSpline(m.x, m.y);
       if (result) {
@@ -126,14 +145,13 @@ export class Editor {
   // ---- Spline management ----
 
   addSpline() {
-    // Add a flat spline near the mouse or at origin
     const mx = this.mouseWorld.x || 0;
     const my = this.mouseWorld.y || 0;
     this.splines.push({
-      p0: { x: mx - 100, y: my },
-      p1: { x: mx - 33, y: my },
-      p2: { x: mx + 33, y: my },
-      p3: { x: mx + 100, y: my },
+      points: [
+        { x: mx - 100, y: my },
+        { x: mx + 100, y: my },
+      ],
     });
     this._rebuildView();
   }
@@ -142,22 +160,24 @@ export class Editor {
     if (this.splines.length <= 1) return;
     if (this.selectedSplineIndex < 0) return;
 
-    this.splines.splice(this.selectedSplineIndex, 1);
+    const removedIdx = this.selectedSplineIndex;
+    this.splines.splice(removedIdx, 1);
 
     // Adjust start if needed
     if (this.startSplineIndex >= this.splines.length) {
       this.startSplineIndex = this.splines.length - 1;
       this.startT = 0;
     }
-    if (this.startSplineIndex === this.selectedSplineIndex) {
+    if (this.startSplineIndex === removedIdx) {
+      this.startSplineIndex = Math.min(removedIdx, this.splines.length - 1);
       this.startT = 0;
-    } else if (this.startSplineIndex > this.selectedSplineIndex) {
+    } else if (this.startSplineIndex > removedIdx) {
       this.startSplineIndex--;
     }
 
     this.selectedSplineIndex = -1;
-    this.selectedPointIndex = -1;
     this.dragState = null;
+    this._notifySelectionChange();
     this._rebuildView();
   }
 
@@ -169,6 +189,23 @@ export class Editor {
       { splineIndex: this.startSplineIndex, t: this.startT },
       this.goalPosition,
     );
+    // Re-apply highlight after rebuild
+    if (this.selectedSplineIndex >= 0) {
+      this.renderer.setEditorSplineHighlight(this.selectedSplineIndex);
+    }
+  }
+
+  _notifySelectionChange() {
+    if (this.onSelectionChange) {
+      this.onSelectionChange(this.selectedSplineIndex);
+    }
+  }
+
+  _selectSpline(index) {
+    if (this.selectedSplineIndex === index) return;
+    this.selectedSplineIndex = index;
+    this.renderer.setEditorSplineHighlight(index);
+    this._notifySelectionChange();
   }
 
   _screenToWorld(sx, sy) {
@@ -190,14 +227,14 @@ export class Editor {
     };
   }
 
-  _findNearestControlPoint(worldX, worldY) {
+  _findNearestKnot(worldX, worldY) {
     let best = null;
     let bestDist = HIT_RADIUS;
 
     for (let i = 0; i < this.splines.length; i++) {
       const s = this.splines[i];
-      for (let pi = 0; pi < 4; pi++) {
-        const pt = s['p' + pi];
+      for (let pi = 0; pi < s.points.length; pi++) {
+        const pt = s.points[pi];
         const dx = worldX - pt.x;
         const dy = worldY - pt.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -210,44 +247,66 @@ export class Editor {
     return best;
   }
 
-  _snapToNearestSpline(worldX, worldY) {
+  _findNearestCurve(worldX, worldY) {
     let best = null;
-    let bestDist = 30;
+    let bestDist = CURVE_HIT_RADIUS;
 
     for (let i = 0; i < this.splines.length; i++) {
       const s = this.splines[i];
-      // Imported lazily — use a simple 32-sample search
+      if (s.points.length < 2) continue;
+      // Create a temporary Spline to sample
+      const spline = new Spline(
+        s.points.map(p => new THREE.Vector2(p.x, p.y))
+      );
       const samples = 32;
       for (let j = 0; j <= samples; j++) {
         const t = j / samples;
-        const pt = this._evaluateSpline(s, t);
+        const pt = spline.pointAt(t);
         const dx = worldX - pt.x;
         const dy = worldY - pt.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < bestDist) {
           bestDist = dist;
-          best = { splineIndex: i, t, position: pt };
+          best = { splineIndex: i, distance: dist };
         }
       }
     }
     return best;
   }
 
-  _evaluateSpline(s, t) {
-    const t1 = 1 - t;
-    const t1_2 = t1 * t1;
-    const t1_3 = t1_2 * t1;
-    const t2 = t * t;
-    const t3 = t2 * t;
-    return {
-      x: t1_3 * s.p0.x + 3 * t1_2 * t * s.p1.x + 3 * t1 * t2 * s.p2.x + t3 * s.p3.x,
-      y: t1_3 * s.p0.y + 3 * t1_2 * t * s.p1.y + 3 * t1 * t2 * s.p2.y + t3 * s.p3.y,
-    };
+  _snapToNearestSpline(worldX, worldY) {
+    let best = null;
+    let bestDist = 30;
+
+    for (let i = 0; i < this.splines.length; i++) {
+      const s = this.splines[i];
+      if (s.points.length < 2) continue;
+      const spline = new Spline(
+        s.points.map(p => new THREE.Vector2(p.x, p.y))
+      );
+      const samples = 32;
+      for (let j = 0; j <= samples; j++) {
+        const t = j / samples;
+        const pt = spline.pointAt(t);
+        const dx = worldX - pt.x;
+        const dy = worldY - pt.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = { splineIndex: i, t, position: { x: pt.x, y: pt.y } };
+        }
+      }
+    }
+    return best;
   }
 
   _isNearStart(worldX, worldY) {
     const s = this.splines[this.startSplineIndex];
-    const pt = this._evaluateSpline(s, this.startT);
+    if (s.points.length < 2) return false;
+    const spline = new Spline(
+      s.points.map(p => new THREE.Vector2(p.x, p.y))
+    );
+    const pt = spline.pointAt(this.startT);
     const dx = worldX - pt.x;
     const dy = worldY - pt.y;
     return Math.sqrt(dx * dx + dy * dy) < 20;
@@ -259,59 +318,123 @@ export class Editor {
     return Math.sqrt(dx * dx + dy * dy) < 20;
   }
 
+  _startDrawing(worldX, worldY) {
+    const newIndex = this.splines.length;
+    this.splines.push({
+      points: [{ x: worldX, y: worldY }],
+    });
+    this.renderer.showEditorView(
+      this.splines,
+      { splineIndex: this.startSplineIndex, t: this.startT },
+      this.goalPosition,
+    );
+    this.dragState = { type: 'drawing', splineIndex: newIndex };
+    this._selectSpline(newIndex);
+  }
+
   // ---- Mouse events ----
 
   _onMouseDown(e) {
     const world = this._screenToWorld(e.clientX, e.clientY);
     this.mouseWorld = world;
 
-    // Check goal first (rendered on top conceptually), then start, then control points
+    // Pan mode: click-drag pans the camera
+    if (this.mode === 'pan') {
+      this.dragState = {
+        type: 'pan',
+        startX: e.clientX,
+        startY: e.clientY,
+        camStartX: this.renderer.camera.position.x,
+        camStartY: this.renderer.camera.position.y,
+      };
+      return;
+    }
+
+    // 1. Goal marker
     if (this._isNearGoal(world.x, world.y)) {
       this.dragState = { type: 'goal' };
-      this.selectedSplineIndex = -1;
-      this.selectedPointIndex = -1;
-      this.renderer.setEditorSplineHighlight(-1);
+      this._selectSpline(-1);
       return;
     }
 
+    // 2. Start marker
     if (this._isNearStart(world.x, world.y)) {
       this.dragState = { type: 'start' };
-      this.selectedSplineIndex = -1;
-      this.selectedPointIndex = -1;
-      this.renderer.setEditorSplineHighlight(-1);
+      this._selectSpline(-1);
       return;
     }
 
-    const hit = this._findNearestControlPoint(world.x, world.y);
-    if (hit) {
-      this.dragState = { type: 'controlPoint', splineIndex: hit.splineIndex, pointIndex: hit.pointIndex };
-      this.selectedSplineIndex = hit.splineIndex;
-      this.selectedPointIndex = hit.pointIndex;
-      this.renderer.setEditorSplineHighlight(hit.splineIndex);
-      this.renderer.setEditorControlPointHighlight(hit.splineIndex, hit.pointIndex);
-    } else {
-      this.selectedSplineIndex = -1;
-      this.selectedPointIndex = -1;
-      this.renderer.setEditorSplineHighlight(-1);
-      this.renderer.setEditorControlPointHighlight(-1, -1);
+    // 3. Knot point hit-test
+    const knotHit = this._findNearestKnot(world.x, world.y);
+    if (knotHit) {
+      this.dragState = { type: 'knot', splineIndex: knotHit.splineIndex, pointIndex: knotHit.pointIndex };
+      this._selectSpline(knotHit.splineIndex);
+      this.renderer.setEditorKnotHighlight(knotHit.splineIndex, knotHit.pointIndex);
+      return;
     }
+
+    // 4. Curve hit-test (select only, no drag)
+    const curveHit = this._findNearestCurve(world.x, world.y);
+    if (curveHit) {
+      this._selectSpline(curveHit.splineIndex);
+      return;
+    }
+
+    // 5. Nothing hit — start drawing a new spline
+    this._startDrawing(world.x, world.y);
   }
 
   _onMouseMove(e) {
     const world = this._screenToWorld(e.clientX, e.clientY);
     this.mouseWorld = world;
 
-    // Hover highlight (only when not dragging)
+    if (this.dragState && this.dragState.type === 'pan') {
+      const ds = this.dragState;
+      const canvas = this.renderer.renderer.domElement;
+      const rect = canvas.getBoundingClientRect();
+      const cam = this.renderer.camera;
+      const worldWidth = cam.right - cam.left;
+
+      const dx = (e.clientX - ds.startX) / rect.width * worldWidth;
+      const dy = (e.clientY - ds.startY) / rect.height * (cam.top - cam.bottom);
+
+      this.renderer.camera.position.x = ds.camStartX - dx;
+      this.renderer.camera.position.y = ds.camStartY + dy;
+      return;
+    }
+
     if (!this.dragState) {
-      const hit = this._findNearestControlPoint(world.x, world.y);
+      // Hover highlight on nearest knot
+      const hit = this._findNearestKnot(world.x, world.y);
       if (hit) {
-        this.renderer.setEditorSplineHighlight(hit.splineIndex);
+        this.renderer.setEditorKnotHighlight(hit.splineIndex, hit.pointIndex);
+      } else {
+        this.renderer.setEditorKnotHighlight(-1, -1);
       }
     }
   }
 
   _onMouseUp() {
+    const ds = this.dragState;
+
+    if (ds && ds.type === 'pan') {
+      this.dragState = null;
+      return;
+    }
+
+    // If drawing and only 1 point placed, remove the spline
+    if (ds && ds.type === 'drawing') {
+      const s = this.splines[ds.splineIndex];
+      if (s.points.length < 2) {
+        this.splines.splice(ds.splineIndex, 1);
+        this.selectedSplineIndex = -1;
+        this._notifySelectionChange();
+        this._rebuildView();
+      }
+    }
+
     this.dragState = null;
+    this.renderer.setEditorKnotHighlight(-1, -1);
   }
 
   // ---- Touch events ----

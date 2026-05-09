@@ -12,7 +12,7 @@ const GRAVITY = 400;         // px/s² downward
 const SPLINE_DRAG = 0.3;     // drag coefficient while riding
 const AIR_DRAG = 0.15;       // drag coefficient in free flight
 const AIR_ACCEL = 500;       // weak horizontal accel in air (px/s²)
-const ACCELERATION = 1000;    // accel along spline (px/s²)
+const ACCELERATION = 600;    // accel along spline (px/s²)
 const WORLD_BOTTOM = -600;   // below this = death
 const LAUNCH_BUFFER = 0.5;  // seconds before re-attaching after manual launch
 
@@ -126,8 +126,8 @@ export class Player {
     // Check endpoints
     if (this.t >= 1.0) {
       this.t = 1.0;
-      const endPos = this.spline.pointAt(1.0);
-      const endTangent = this.spline.tangentAt(1.0);
+      const endPos = this.spline.getEndPoint();
+      const endTangent = this.spline.getEndTangent();
       const travelDir = endTangent.clone().normalize();
       const connected = this._findConnectedSpline(endPos, travelDir, this.spline, splines);
       if (connected) {
@@ -137,8 +137,8 @@ export class Player {
       }
     } else if (this.t <= 0.0 && this.speed < 0) {
       this.t = 0.0;
-      const startPos = this.spline.pointAt(0.0);
-      const startTangent = this.spline.tangentAt(0.0);
+      const startPos = this.spline.getStartPoint();
+      const startTangent = this.spline.getStartTangent();
       const travelDir = startTangent.clone().normalize().multiplyScalar(-1);
       const connected = this._findConnectedSpline(startPos, travelDir, this.spline, splines);
       if (connected) {
@@ -153,27 +153,19 @@ export class Player {
     for (const spline of splines) {
       if (spline === excludeSpline) continue;
 
-      const startPt = spline.pointAt(0);
+      const startPt = spline.getStartPoint();
       if (position.distanceTo(startPt) < 3) {
-        const tng = spline.tangentAt(0);
-        const tlen = tng.length();
-        if (tlen > 0.0001) {
-          const dir = tng.clone().divideScalar(tlen);
-          if (dir.dot(travelDirection) > 0.85) {
-            return { spline, t: 0 };
-          }
+        const dir = spline.getStartTangent().normalize();
+        if (dir.dot(travelDirection) > 0.85) {
+          return { spline, t: 0 };
         }
       }
 
-      const endPt = spline.pointAt(1);
+      const endPt = spline.getEndPoint();
       if (position.distanceTo(endPt) < 3) {
-        const tng = spline.tangentAt(1);
-        const tlen = tng.length();
-        if (tlen > 0.0001) {
-          const dir = tng.clone().divideScalar(tlen);
-          if (dir.dot(travelDirection) > 0.85) {
-            return { spline, t: 1 };
-          }
+        const dir = spline.getEndTangent().normalize();
+        if (dir.dot(travelDirection) > 0.85) {
+          return { spline, t: 1 };
         }
       }
     }

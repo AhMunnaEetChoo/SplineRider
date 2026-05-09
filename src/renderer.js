@@ -47,7 +47,6 @@ export class Renderer {
     // Editor state
     this._editorSplineLines = [];
     this._editorSplineDots = [];
-    this._editorHandleLines = [];
     this._editorSelectedIndex = -1;
 
     // Controls hint
@@ -103,19 +102,12 @@ export class Renderer {
   }
 
   _buildGameView(splines, goalPosition) {
-    const allVerts = [];
-    for (let i = 0; i < splines.length; i++) {
-      const sampled = splines[i].samplePoints(64);
-      const startIdx = (i > 0) ? 1 : 0;
-      for (let j = startIdx; j < sampled.length; j++) {
-        allVerts.push(sampled[j].x, sampled[j].y, 0);
-      }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(allVerts, 3));
     const mat = new THREE.LineBasicMaterial({ color: '#4ecdc4' });
-    const line = new THREE.Line(geo, mat);
-    this.gameViewGroup.add(line);
+    for (const spline of splines) {
+      const geo = spline.createLineGeometry(64);
+      const line = new THREE.Line(geo, mat);
+      this.gameViewGroup.add(line);
+    }
 
     if (splines.length > 0) {
       const startPos = splines[0].pointAt(0);
@@ -156,7 +148,6 @@ export class Renderer {
     }
     this._editorSplineLines = [];
     this._editorSplineDots = [];
-    this._editorHandleLines = [];
     this._editorSelectedIndex = -1;
 
     if (this.startMarker) {
@@ -171,18 +162,11 @@ export class Renderer {
 
   _buildEditorView(splinesData, startInfo, goalPos) {
     const lineMat = new THREE.LineBasicMaterial({ color: '#4ecdc4' });
-    const handleMat = new THREE.LineBasicMaterial({ color: '#4ecdc444' });
-    const dotMatEnd = new THREE.MeshBasicMaterial({ color: '#4ecdc4' });
-    const dotMatCtrl = new THREE.MeshBasicMaterial({ color: '#88ddf8' });
+    const dotMat = new THREE.MeshBasicMaterial({ color: '#4ecdc4' });
 
     for (let i = 0; i < splinesData.length; i++) {
       const s = splinesData[i];
-      const spline = new Spline(
-        new THREE.Vector2(s.p0.x, s.p0.y),
-        new THREE.Vector2(s.p1.x, s.p1.y),
-        new THREE.Vector2(s.p2.x, s.p2.y),
-        new THREE.Vector2(s.p3.x, s.p3.y),
-      );
+      const spline = new Spline(s.points.map(p => new THREE.Vector2(p.x, p.y)));
 
       // Curve line
       const geo = spline.createLineGeometry(64);
@@ -190,30 +174,12 @@ export class Renderer {
       this.editorViewGroup.add(line);
       this._editorSplineLines.push({ spline, line, geo });
 
-      // Handle lines
-      const hVerts1 = [s.p0.x, s.p0.y, 0, s.p1.x, s.p1.y, 0];
-      const hGeo1 = new THREE.BufferGeometry();
-      hGeo1.setAttribute('position', new THREE.Float32BufferAttribute(hVerts1, 3));
-      const hLine1 = new THREE.Line(hGeo1, handleMat.clone());
-      this.editorViewGroup.add(hLine1);
-
-      const hVerts2 = [s.p2.x, s.p2.y, 0, s.p3.x, s.p3.y, 0];
-      const hGeo2 = new THREE.BufferGeometry();
-      hGeo2.setAttribute('position', new THREE.Float32BufferAttribute(hVerts2, 3));
-      const hLine2 = new THREE.Line(hGeo2, handleMat.clone());
-      this.editorViewGroup.add(hLine2);
-
-      this._editorHandleLines.push({ geo1: hGeo1, line1: hLine1, geo2: hGeo2, line2: hLine2 });
-
-      // Control point dots
+      // Knot dots
       const dots = [];
-      for (let pi = 0; pi < 4; pi++) {
-        const isEndpoint = (pi === 0 || pi === 3);
-        const radius = isEndpoint ? 7 : 5;
-        const dotGeo = new THREE.CircleGeometry(radius, 16);
-        const dot = new THREE.Mesh(dotGeo, isEndpoint ? dotMatEnd.clone() : dotMatCtrl.clone());
-        const pt = s['p' + pi];
-        dot.position.set(pt.x, pt.y, 0.03);
+      for (const p of s.points) {
+        const dotGeo = new THREE.CircleGeometry(6, 16);
+        const dot = new THREE.Mesh(dotGeo, dotMat.clone());
+        dot.position.set(p.x, p.y, 0.03);
         this.editorViewGroup.add(dot);
         dots.push(dot);
       }
@@ -221,12 +187,8 @@ export class Renderer {
     }
 
     // Start marker
-    const startSpline = new Spline(
-      new THREE.Vector2(splinesData[startInfo.splineIndex].p0.x, splinesData[startInfo.splineIndex].p0.y),
-      new THREE.Vector2(splinesData[startInfo.splineIndex].p1.x, splinesData[startInfo.splineIndex].p1.y),
-      new THREE.Vector2(splinesData[startInfo.splineIndex].p2.x, splinesData[startInfo.splineIndex].p2.y),
-      new THREE.Vector2(splinesData[startInfo.splineIndex].p3.x, splinesData[startInfo.splineIndex].p3.y),
-    );
+    const startSplineData = splinesData[startInfo.splineIndex];
+    const startSpline = new Spline(startSplineData.points.map(p => new THREE.Vector2(p.x, p.y)));
     const startPos = startSpline.pointAt(startInfo.t);
     const startGeo = new THREE.CircleGeometry(10, 32);
     const startMat = new THREE.MeshBasicMaterial({ color: '#4ecdc4' });
@@ -248,10 +210,8 @@ export class Renderer {
     const entry = this._editorSplineLines[index];
     const s = splineData;
 
-    entry.spline.p0.set(s.p0.x, s.p0.y);
-    entry.spline.p1.set(s.p1.x, s.p1.y);
-    entry.spline.p2.set(s.p2.x, s.p2.y);
-    entry.spline.p3.set(s.p3.x, s.p3.y);
+    // Rebuild the Spline instance from points
+    entry.spline = new Spline(s.points.map(p => new THREE.Vector2(p.x, p.y)));
 
     const sampled = entry.spline.samplePoints(64);
     const verts = entry.geo.attributes.position.array;
@@ -261,24 +221,31 @@ export class Renderer {
     }
     entry.geo.attributes.position.needsUpdate = true;
 
-    // Handle lines
-    const h = this._editorHandleLines[index];
-    h.geo1.attributes.position.array[0] = s.p0.x;
-    h.geo1.attributes.position.array[1] = s.p0.y;
-    h.geo1.attributes.position.array[3] = s.p1.x;
-    h.geo1.attributes.position.array[4] = s.p1.y;
-    h.geo1.attributes.position.needsUpdate = true;
+    // Update knot dots — rebuild if count changed
+    let dots = this._editorSplineDots[index];
+    if (!dots || dots.length !== s.points.length) {
+      if (dots) {
+        for (const dot of dots) {
+          dot.geometry.dispose();
+          dot.material.dispose();
+          this.editorViewGroup.remove(dot);
+        }
+      }
+      dots = [];
+      const isHighlighted = (index === this._editorSelectedIndex);
+      const color = isHighlighted ? '#ffe66d' : '#4ecdc4';
+      const dotMat = new THREE.MeshBasicMaterial({ color });
+      for (let pi = 0; pi < s.points.length; pi++) {
+        const dotGeo = new THREE.CircleGeometry(6, 16);
+        const dot = new THREE.Mesh(dotGeo, dotMat.clone());
+        this.editorViewGroup.add(dot);
+        dots.push(dot);
+      }
+      this._editorSplineDots[index] = dots;
+    }
 
-    h.geo2.attributes.position.array[0] = s.p2.x;
-    h.geo2.attributes.position.array[1] = s.p2.y;
-    h.geo2.attributes.position.array[3] = s.p3.x;
-    h.geo2.attributes.position.array[4] = s.p3.y;
-    h.geo2.attributes.position.needsUpdate = true;
-
-    // Control point dots
-    const dots = this._editorSplineDots[index];
-    for (let pi = 0; pi < 4; pi++) {
-      const pt = s['p' + pi];
+    for (let pi = 0; pi < s.points.length; pi++) {
+      const pt = s.points[pi];
       dots[pi].position.set(pt.x, pt.y, 0.03);
     }
   }
@@ -289,8 +256,6 @@ export class Renderer {
 
     const defaultColor = '#4ecdc4';
     const highlightColor = '#ffe66d';
-    const defaultCtrl = '#88ddf8';
-    const highlightCtrl = '#ffcc44';
 
     for (let i = 0; i < this._editorSplineLines.length; i++) {
       const color = (i === index) ? highlightColor : defaultColor;
@@ -298,19 +263,16 @@ export class Renderer {
     }
 
     for (let i = 0; i < this._editorSplineDots.length; i++) {
-      for (let pi = 0; pi < 4; pi++) {
-        const isEndpoint = (pi === 0 || pi === 3);
-        const color = (i === index)
-          ? (isEndpoint ? highlightColor : highlightCtrl)
-          : (isEndpoint ? defaultColor : defaultCtrl);
-        this._editorSplineDots[i][pi].material.color.set(color);
+      const color = (i === index) ? highlightColor : defaultColor;
+      for (const dot of this._editorSplineDots[i]) {
+        dot.material.color.set(color);
       }
     }
   }
 
-  setEditorControlPointHighlight(splineIndex, pointIndex) {
+  setEditorKnotHighlight(splineIndex, pointIndex) {
     for (let i = 0; i < this._editorSplineDots.length; i++) {
-      for (let pi = 0; pi < 4; pi++) {
+      for (let pi = 0; pi < this._editorSplineDots[i].length; pi++) {
         const dot = this._editorSplineDots[i][pi];
         const isSelected = (i === splineIndex && pi === pointIndex);
         dot.scale.setScalar(isSelected ? 1.5 : 1.0);

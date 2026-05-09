@@ -7,10 +7,7 @@ const WIN_RADIUS = 40;
 
 function _deserializeSplines(splineDataArray) {
   return splineDataArray.map(s => new Spline(
-    new THREE.Vector2(s.p0.x, s.p0.y),
-    new THREE.Vector2(s.p1.x, s.p1.y),
-    new THREE.Vector2(s.p2.x, s.p2.y),
-    new THREE.Vector2(s.p3.x, s.p3.y),
+    s.points.map(p => new THREE.Vector2(p.x, p.y))
   ));
 }
 
