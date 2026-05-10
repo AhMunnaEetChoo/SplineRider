@@ -33,9 +33,18 @@ export class Game {
       levelData.goalPosition.x, levelData.goalPosition.y
     );
 
-    const startIdx = Math.min(levelData.startSplineIndex || 0, this.splines.length - 1);
-    this.player = new Player(this.splines[startIdx]);
-    this.player.t = levelData.startT || 0;
+    if (levelData.startPosition) {
+      // Free-floating start: player begins in free flight above the splines
+      const firstIdx = Math.min(levelData.startSplineIndex || 0, this.splines.length - 1);
+      this.player = new Player(this.splines[firstIdx]);
+      this.player.state = State.FREE_FLIGHT;
+      this.player.position.set(levelData.startPosition.x, levelData.startPosition.y);
+      this.player.velocity.set(0, 0);
+    } else {
+      const startIdx = Math.min(levelData.startSplineIndex || 0, this.splines.length - 1);
+      this.player = new Player(this.splines[startIdx]);
+      this.player.t = levelData.startT || 0;
+    }
 
     this.elapsedTime = 0;
     this._lastState = this.player.state;

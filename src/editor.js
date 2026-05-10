@@ -16,6 +16,7 @@ export class Editor {
     this.startSplineIndex = 0;
     this.startT = 0;
     this.goalPosition = { x: 0, y: 0 };
+    this.startPosition = null;
 
     // Selection / interaction state
     this.selectedSplineIndex = -1;
@@ -47,6 +48,7 @@ export class Editor {
     this.startSplineIndex = 0;
     this.startT = 0;
     this.goalPosition = { x: 200, y: 0 };
+    this.startPosition = null;
     this.selectedSplineIndex = -1;
     this.dragState = null;
     this._rebuildView();
@@ -62,19 +64,26 @@ export class Editor {
       x: levelData.goalPosition.x,
       y: levelData.goalPosition.y,
     };
+    this.startPosition = levelData.startPosition
+      ? { x: levelData.startPosition.x, y: levelData.startPosition.y }
+      : null;
     this.selectedSplineIndex = -1;
     this.dragState = null;
     this._rebuildView();
   }
 
   getLevelData() {
-    return {
+    const data = {
       name: '',
       splines: this.splines,
       startSplineIndex: this.startSplineIndex,
       startT: this.startT,
       goalPosition: { x: this.goalPosition.x, y: this.goalPosition.y },
     };
+    if (this.startPosition) {
+      data.startPosition = { x: this.startPosition.x, y: this.startPosition.y };
+    }
+    return data;
   }
 
   activate() {

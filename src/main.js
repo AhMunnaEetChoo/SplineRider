@@ -26,11 +26,8 @@ const game = new Game();
 // Compose keyboard + touch input
 const composedInput = {
   isDown(key) {
-    if (key === 'ArrowRight' || key === 'd') {
-      return input.isDown(key) || touchInput.isDown('touchRight');
-    }
-    if (key === 'ArrowLeft' || key === 'a') {
-      return input.isDown(key) || touchInput.isDown('touchLeft');
+    if (key === 'hold') {
+      return input.isDown(' ') || touchInput.isDown('touchHold');
     }
     return input.isDown(key);
   },
@@ -56,7 +53,7 @@ function showScreen(id, data) {
 
   if (id === 'play') {
     editor.deactivate();
-    renderer.showGameView(game.splines, game.goalPosition);
+    renderer.showGameView(game.splines, game.goalPosition, currentLevelData.startPosition);
   } else if (id === 'editor') {
     editor.activate();
   }
@@ -302,7 +299,7 @@ function _showLevelSelect() {
 }
 
 // ---- Initial ----
-renderer.showGameView(game.splines, game.goalPosition);
+renderer.showGameView(game.splines, game.goalPosition, currentLevelData.startPosition);
 showScreen('start');
 
 // ---- Game Loop ----
@@ -331,7 +328,7 @@ function tick() {
   // Update based on current screen
   if (currentScreen === 'play' && !isPaused) {
     game.update(dt, composedInput);
-    renderer.updatePlayer(game.player);
+    renderer.updatePlayer(game.player, composedInput.isDown('hold'));
     effects.update(dt);
   } else if (currentScreen === 'editor') {
     if (input.consumeJustPressed(' ')) {

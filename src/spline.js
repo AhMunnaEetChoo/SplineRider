@@ -44,6 +44,23 @@ export class Spline {
     return _catmullRomTangent(prev, curr, next, next2, localT);
   }
 
+  findClosestPointOnSpline(worldPos, samples = 128) {
+    let bestT = 0;
+    let bestDist = Infinity;
+    let bestPoint = new THREE.Vector2();
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const pt = this.pointAt(t);
+      const dist = worldPos.distanceToSquared(pt);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestT = t;
+        bestPoint = pt;
+      }
+    }
+    return { t: bestT, point: bestPoint, distance: Math.sqrt(bestDist) };
+  }
+
   samplePoints(count = 64) {
     const pts = [];
     for (let i = 0; i <= count; i++) {

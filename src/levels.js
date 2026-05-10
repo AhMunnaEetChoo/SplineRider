@@ -5,6 +5,7 @@ export const BUILT_IN_LEVELS = [
     name: 'First Ride',
     startSplineIndex: 0,
     startT: 0,
+    startPosition: { x: -500, y: 260 },
     goalPosition: { x: 600, y: -200 },
     splines: [
       {
@@ -47,6 +48,7 @@ export const BUILT_IN_LEVELS = [
     name: 'The Gap',
     startSplineIndex: 0,
     startT: 0,
+    startPosition: { x: -400, y: 60 },
     goalPosition: { x: 700, y: -100 },
     splines: [
       {
@@ -79,6 +81,7 @@ export const BUILT_IN_LEVELS = [
     name: 'Rollercoaster',
     startSplineIndex: 0,
     startT: 0,
+    startPosition: { x: -500, y: 160 },
     goalPosition: { x: 800, y: -300 },
     splines: [
       {
@@ -102,6 +105,7 @@ export const BUILT_IN_LEVELS = [
     name: 'Pinball',
     startSplineIndex: 0,
     startT: 0,
+    startPosition: { x: -300, y: 60 },
     goalPosition: { x: 600, y: 200 },
     splines: [
       {
@@ -148,6 +152,7 @@ export const BUILT_IN_LEVELS = [
     name: 'Gauntlet',
     startSplineIndex: 0,
     startT: 0,
+    startPosition: { x: -500, y: 160 },
     goalPosition: { x: 800, y: -100 },
     splines: [
       {

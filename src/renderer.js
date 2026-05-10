@@ -40,6 +40,19 @@ export class Renderer {
     this.playerDot = new THREE.Mesh(dotGeo, dotMat);
     this.scene.add(this.playerDot);
 
+    // Player glow (visible when riding)
+    const glowGeo = new THREE.CircleGeometry(20, 32);
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: '#ff9944',
+      transparent: true,
+      opacity: 0.35,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.playerGlow = new THREE.Mesh(glowGeo, glowMat);
+    this.playerGlow.visible = false;
+    this.scene.add(this.playerGlow);
+
     // Markers
     this.startMarker = null;
     this.goalMarker = null;
@@ -61,7 +74,7 @@ export class Renderer {
     ctx.fillStyle = '#ffffff44';
     ctx.font = '16px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('← → or A/D to move | press both to launch | R to reset', 256, 32);
+    ctx.fillText('Hold SPACE or click to ride | Release to launch | R to reset', 256, 32);
 
     const texture = new THREE.CanvasTexture(canvas);
     const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
@@ -73,7 +86,7 @@ export class Renderer {
 
   // ---- Game View ----
 
-  showGameView(splines, goalPosition) {
+  showGameView(splines, goalPosition, startPosition) {
     if (this.editorViewGroup.parent) {
       this.scene.remove(this.editorViewGroup);
     }
@@ -81,7 +94,7 @@ export class Renderer {
       this.scene.add(this.gameViewGroup);
     }
     this._clearGameView();
-    this._buildGameView(splines, goalPosition);
+    this._buildGameView(splines, goalPosition, startPosition);
   }
 
   _clearGameView() {
@@ -101,7 +114,7 @@ export class Renderer {
     }
   }
 
-  _buildGameView(splines, goalPosition) {
+  _buildGameView(splines, goalPosition, startPosition) {
     const mat = new THREE.LineBasicMaterial({ color: '#4ecdc4' });
     for (const spline of splines) {
       const geo = spline.createLineGeometry(64);
@@ -110,7 +123,9 @@ export class Renderer {
     }
 
     if (splines.length > 0) {
-      const startPos = splines[0].pointAt(0);
+      const startPos = startPosition
+        ? new THREE.Vector2(startPosition.x, startPosition.y)
+        : splines[0].pointAt(0);
       const startGeo = new THREE.CircleGeometry(10, 32);
       const startMat = new THREE.MeshBasicMaterial({ color: '#4ecdc4' });
       this.startMarker = new THREE.Mesh(startGeo, startMat);
@@ -294,9 +309,17 @@ export class Renderer {
 
   // ---- Common ----
 
-  updatePlayer(player) {
+  updatePlayer(player, isHolding = false) {
     const pos = player.getPosition();
     this.playerDot.position.set(pos.x, pos.y, 0.05);
+
+    if (this.playerGlow) {
+      this.playerGlow.position.set(pos.x, pos.y, 0.04);
+      const riding = (player.getState() === 'riding');
+      const seeking = !riding && isHolding && (player.getState() === 'freeFlight');
+      this.playerGlow.visible = riding || seeking;
+      this.playerGlow.material.opacity = seeking ? 0.15 : 0.35;
+    }
 
     this.camera.position.lerp(
       new THREE.Vector3(pos.x, pos.y, 100),
