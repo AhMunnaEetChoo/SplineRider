@@ -1,20 +1,6 @@
 // DOM screen manager. Creates all overlay elements dynamically.
 
-const OVERLAY_STYLE = `
-  position:absolute; top:0; left:0; width:100%; height:100%;
-  display:none; flex-direction:column; justify-content:center; align-items:center;
-  background:rgba(26,26,46,0.93); color:#fff; font-family:monospace;
-  pointer-events:all; z-index:10;
-`;
-
-const BUTTON_STYLE = `
-  padding:12px 32px; margin:6px; font-family:monospace; font-size:16px;
-  color:#fff; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3);
-  border-radius:4px; cursor:pointer; min-width:160px; text-align:center;
-`;
-
-const TITLE_STYLE = 'font-size:42px; margin-bottom:20px; color:#ffe66d; text-shadow:0 0 20px #ffe66d44;';
-const SUBTITLE_STYLE = 'font-size:22px; margin-bottom:30px; color:#fff;';
+import { Colors } from './colors.js';
 
 function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
@@ -26,99 +12,118 @@ function el(tag, attrs, ...children) {
   return e;
 }
 
-function btn(text, id) {
-  return el('button', { id, style: BUTTON_STYLE, textContent: text });
-}
-
 export class UIManager {
   constructor() {
+    const C = Colors;
+    this._overlayStyle = `position:absolute; top:0; left:0; width:100%; height:100%;`
+      + ` display:none; flex-direction:column; justify-content:center; align-items:center;`
+      + ` background:${C.rgba(C.bg, 0.93)}; color:${C.text}; font-family:monospace;`
+      + ` pointer-events:all; z-index:10;`;
+
+    this._buttonStyle = `padding:12px 32px; margin:6px; font-family:monospace; font-size:16px;`
+      + ` color:${C.text}; background:${C.rgba(C.text, 0.1)};`
+      + ` border:1px solid ${C.rgba(C.text, 0.3)};`
+      + ` border-radius:4px; cursor:pointer; min-width:160px; text-align:center;`;
+
+    this._titleStyle = `font-size:42px; margin-bottom:20px; color:${C.highlight};`
+      + ` text-shadow:0 0 20px ${C.rgba(C.highlight, 0.27)};`;
+
+    this._subtitleStyle = `font-size:22px; margin-bottom:30px; color:${C.text};`;
+
+    this._tbStyle = `padding:6px 14px; font-family:monospace; font-size:13px;`
+      + ` color:${C.text}; background:${C.rgba(C.text, 0.1)};`
+      + ` border:1px solid ${C.rgba(C.text, 0.3)}; border-radius:4px; cursor:pointer;`;
+
+    this._dimText = C.rgba(C.text, 0.5);
+    this._dimTextDark = C.rgba(C.text, 0.4);
+
     this.screens = {};
     this._callbacks = {};
     this._buildScreens();
   }
 
+  _btn(text, id) {
+    return el('button', { id, style: this._buttonStyle, textContent: text });
+  }
+
+  _tbBtn(text, id) {
+    return el('button', { id, textContent: text, style: this._tbStyle });
+  }
+
   _buildScreens() {
+    const C = Colors;
+
     // Start Screen
-    this.screens.start = el('div', { id: 'screen-start', style: OVERLAY_STYLE },
-      el('div', { style: TITLE_STYLE }, 'Spline Rider'),
-      el('div', { style: SUBTITLE_STYLE }, 'Ride the curves. Reach the goal.'),
-      btn('Play', 'btn-start-play'),
-      btn('Editor', 'btn-start-editor'),
-      btn('Levels', 'btn-start-levels'),
+    this.screens.start = el('div', { id: 'screen-start', style: this._overlayStyle },
+      el('div', { style: this._titleStyle }, 'Spline Rider'),
+      el('div', { style: this._subtitleStyle }, 'Ride the curves. Reach the goal.'),
+      this._btn('Play', 'btn-start-play'),
+      this._btn('Editor', 'btn-start-editor'),
+      this._btn('Levels', 'btn-start-levels'),
     );
     document.body.appendChild(this.screens.start);
 
     // Level Select Screen
-    this.screens.levels = el('div', { id: 'screen-levels', style: OVERLAY_STYLE },
-      el('div', { style: SUBTITLE_STYLE }, 'Select Level'),
+    this.screens.levels = el('div', { id: 'screen-levels', style: this._overlayStyle },
+      el('div', { style: this._subtitleStyle }, 'Select Level'),
       el('div', { id: 'level-list', style: 'max-height:50vh; overflow-y:auto; width:300px;' }),
-      btn('Back', 'btn-levels-back'),
+      this._btn('Back', 'btn-levels-back'),
     );
     document.body.appendChild(this.screens.levels);
 
     // Win Screen
-    this.screens.win = el('div', { id: 'screen-win', style: OVERLAY_STYLE },
-      el('div', { style: TITLE_STYLE }, 'You Win!'),
+    this.screens.win = el('div', { id: 'screen-win', style: this._overlayStyle },
+      el('div', { style: this._titleStyle }, 'You Win!'),
       el('div', { id: 'win-time', style: 'font-size:28px; margin-bottom:8px;' }),
-      el('div', { id: 'win-best', style: 'font-size:18px; color:#888; margin-bottom:20px;' }),
-      btn('Replay', 'btn-win-replay'),
-      btn('Menu', 'btn-win-menu'),
+      el('div', { id: 'win-best', style: `font-size:18px; color:${this._dimText}; margin-bottom:20px;` }),
+      this._btn('Replay', 'btn-win-replay'),
+      this._btn('Menu', 'btn-win-menu'),
     );
     document.body.appendChild(this.screens.win);
 
     // Death Screen
-    this.screens.dead = el('div', { id: 'screen-dead', style: OVERLAY_STYLE },
-      el('div', { style: TITLE_STYLE }, 'Fell Off!'),
-      btn('Try Again', 'btn-dead-retry'),
-      btn('Menu', 'btn-dead-menu'),
+    this.screens.dead = el('div', { id: 'screen-dead', style: this._overlayStyle },
+      el('div', { style: this._titleStyle }, 'Fell Off!'),
+      this._btn('Try Again', 'btn-dead-retry'),
+      this._btn('Menu', 'btn-dead-menu'),
     );
     document.body.appendChild(this.screens.dead);
 
     // Pause Screen
-    this.screens.pause = el('div', { id: 'screen-pause', style: OVERLAY_STYLE },
-      el('div', { style: TITLE_STYLE }, 'Paused'),
-      btn('Resume', 'btn-pause-resume'),
-      btn('Restart', 'btn-pause-restart'),
-      btn('Menu', 'btn-pause-menu'),
+    this.screens.pause = el('div', { id: 'screen-pause', style: this._overlayStyle },
+      el('div', { style: this._titleStyle }, 'Paused'),
+      this._btn('Resume', 'btn-pause-resume'),
+      this._btn('Restart', 'btn-pause-restart'),
+      this._btn('Menu', 'btn-pause-menu'),
     );
     document.body.appendChild(this.screens.pause);
 
-    // Editor Toolbar — 5 primary items + "More" dropdown for secondary actions
-    const TB_STYLE = `padding:6px 14px; font-family:monospace; font-size:13px;
-      color:#fff; background:rgba(255,255,255,0.1);
-      border:1px solid rgba(255,255,255,0.3); border-radius:4px; cursor:pointer;`;
-    const tbBtn = (text, id) => el('button', { id, textContent: text, style: TB_STYLE });
-
+    // Editor Toolbar
     this.editorToolbar = el('div', {
       id: 'editor-toolbar',
-      style: `display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%);
-              gap:6px; z-index:5; pointer-events:all;`
+      style: `display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%);`
+        + ` gap:6px; z-index:5; pointer-events:all;`
     },
-      tbBtn('Pan', 'btn-toggle-mode'),
-      tbBtn('- Spline', 'btn-delete-spline'),
+      this._tbBtn('Pan', 'btn-toggle-mode'),
+      this._tbBtn('- Spline', 'btn-delete-spline'),
 
-      // "More" dropdown
       el('div', { style: 'position:relative; display:inline-flex;' },
-        el('button', {
-          id: 'btn-more-menu',
-          textContent: '☰ More',
-          style: TB_STYLE,
-        }),
+        el('button', { id: 'btn-more-menu', textContent: '☰ More', style: this._tbStyle }),
         el('div', {
           id: 'editor-more-dropdown',
-          style: `display:none; position:absolute; top:100%; right:0; margin-top:4px;
-                  flex-direction:column; gap:2px; background:#1e1e3a;
-                  border:1px solid #444; border-radius:4px; padding:4px; z-index:15;`
+          style: `display:none; position:absolute; top:100%; right:0; margin-top:4px;`
+            + ` flex-direction:column; gap:2px; background:${C.bgSecondary};`
+            + ` border:1px solid ${C.rgba(C.text, 0.25)}; border-radius:4px; padding:4px; z-index:15;`
         },
-          el('button', { id: 'btn-save-level', textContent: 'Save', style: TB_STYLE }),
-          el('button', { id: 'btn-load-level', textContent: 'Load', style: TB_STYLE }),
-          el('button', { id: 'btn-export-level', textContent: 'Export', style: TB_STYLE }),
-          el('button', { id: 'btn-import-level', textContent: 'Import', style: TB_STYLE }),
+          el('button', { id: 'btn-save-level', textContent: 'Save', style: this._tbStyle }),
+          el('button', { id: 'btn-load-level', textContent: 'Load', style: this._tbStyle }),
+          el('button', { id: 'btn-export-level', textContent: 'Export', style: this._tbStyle }),
+          el('button', { id: 'btn-import-level', textContent: 'Import', style: this._tbStyle }),
         )
       ),
 
-      tbBtn('Test', 'btn-test-level'),
-      tbBtn('Back', 'btn-editor-back'),
+      this._tbBtn('Test', 'btn-test-level'),
+      this._tbBtn('Back', 'btn-editor-back'),
     );
     document.body.appendChild(this.editorToolbar);
     document.getElementById('btn-delete-spline').disabled = true;
@@ -140,40 +145,54 @@ export class UIManager {
     });
 
     // Import modal
-    this._importModal = el('div', { style: `display:none; position:absolute; top:0; left:0; width:100%; height:100%; z-index:20; pointer-events:all;` },
-      el('div', { style: `position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:#1e1e3a; padding:20px; border-radius:8px; border:1px solid #444;` },
-        el('div', { style: 'color:#fff; font-family:monospace; margin-bottom:8px;' }, 'Paste level JSON:'),
-        el('textarea', { id: 'import-textarea', style: 'width:400px; height:200px; background:#111; color:#fff; font-family:monospace; font-size:12px; border:1px solid #444; padding:8px; resize:vertical;' }),
-        el('div', { id: 'import-error', style: 'color:#ff6b6b; font-family:monospace; font-size:12px; margin-top:4px; display:none;' }),
+    this._importModal = el('div', {
+      style: `display:none; position:absolute; top:0; left:0; width:100%; height:100%; z-index:20; pointer-events:all;`
+    },
+      el('div', {
+        style: `position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);`
+          + ` background:${C.bgSecondary}; padding:20px; border-radius:8px;`
+          + ` border:1px solid ${C.rgba(C.text, 0.25)};`
+      },
+        el('div', { style: `color:${C.text}; font-family:monospace; margin-bottom:8px;` }, 'Paste level JSON:'),
+        el('textarea', {
+          id: 'import-textarea',
+          style: `width:400px; height:200px; background:${C.bg}; color:${C.text};`
+            + ` font-family:monospace; font-size:12px; border:1px solid ${C.rgba(C.text, 0.25)};`
+            + ` padding:8px; resize:vertical;`
+        }),
+        el('div', { id: 'import-error', style: `color:${C.warn}; font-family:monospace; font-size:12px; margin-top:4px; display:none;` }),
         el('div', { style: 'display:flex; gap:8px; margin-top:8px; justify-content:flex-end;' },
-          btn('Import', 'btn-import-confirm'),
-          btn('Cancel', 'btn-import-cancel'),
+          this._btn('Import', 'btn-import-confirm'),
+          this._btn('Cancel', 'btn-import-cancel'),
         )
       )
     );
     document.body.appendChild(this._importModal);
 
     // Toast
-    this._toast = el('div', { style: `display:none; position:absolute; bottom:40px; left:50%; transform:translateX(-50%); padding:8px 20px; background:rgba(0,0,0,0.8); color:#4ecdc4; font-family:monospace; font-size:14px; border-radius:4px; z-index:30; pointer-events:none;` });
+    this._toast = el('div', {
+      style: `display:none; position:absolute; bottom:40px; left:50%; transform:translateX(-50%);`
+        + ` padding:8px 20px; background:${C.rgba(C.bg, 0.93)}; color:${C.accent};`
+        + ` font-family:monospace; font-size:14px; border-radius:4px; z-index:30; pointer-events:none;`
+    });
     document.body.appendChild(this._toast);
     this._toastTimer = null;
 
-    // Mobile pause button — visible during gameplay
+    // Mobile pause button
     this.pauseBtn = el('button', {
       id: 'btn-mobile-pause',
       textContent: '❚❚',
-      style: `display:none; position:absolute; top:16px; right:16px; width:42px; height:42px;
-              z-index:15; pointer-events:all; border-radius:50%;
-              border:2px solid rgba(255,255,255,0.4);
-              background:rgba(0,0,0,0.35); color:#fff; font-size:18px;
-              line-height:1; cursor:pointer;`
+      style: `display:none; position:absolute; top:16px; right:16px; width:42px; height:42px;`
+        + ` z-index:15; pointer-events:all; border-radius:50%;`
+        + ` border:2px solid ${C.rgba(C.text, 0.4)};`
+        + ` background:${C.rgba(C.bg, 0.35)}; color:${C.text}; font-size:18px;`
+        + ` line-height:1; cursor:pointer;`
     });
     document.body.appendChild(this.pauseBtn);
   }
 
   on(buttonId, callback) {
     this._callbacks[buttonId] = callback;
-    // Try to bind to existing button
     const b = document.getElementById(buttonId);
     if (b) {
       b.addEventListener('click', callback);
@@ -181,14 +200,12 @@ export class UIManager {
   }
 
   showScreen(id, data) {
-    // Hide all screens
     for (const key of Object.keys(this.screens)) {
       this.screens[key].style.display = 'none';
     }
     this.editorToolbar.style.display = 'none';
     this.pauseBtn.style.display = 'none';
 
-    // Show requested screen
     if (id === 'editor') {
       this.editorToolbar.style.display = 'flex';
     } else if (id === 'play') {
@@ -197,7 +214,6 @@ export class UIManager {
       this.screens[id].style.display = 'flex';
     }
 
-    // Populate dynamic content
     if (id === 'win' && data) {
       document.getElementById('win-time').textContent = `Time: ${data.time.toFixed(2)}s`;
       if (data.bestTime !== null) {
@@ -223,21 +239,23 @@ export class UIManager {
     const onDelete = data.onDelete;
 
     if (levels.length === 0) {
-      list.appendChild(el('div', { style: 'color:#888; padding:10px;' }, 'No levels found.'));
+      list.appendChild(el('div', { style: `color:${this._dimText}; padding:10px;` }, 'No levels found.'));
       return;
     }
 
+    const C = Colors;
+
     for (const level of levels) {
       const row = el('div', {
-        style: `display:flex; justify-content:space-between; align-items:center; padding:10px; margin:4px 0;
-                background:rgba(255,255,255,0.05); border-radius:4px; cursor:pointer;`
+        style: `display:flex; justify-content:space-between; align-items:center; padding:10px; margin:4px 0;`
+          + ` background:${C.rgba(C.text, 0.05)}; border-radius:4px; cursor:pointer;`
       });
 
       const info = el('div', {},
         el('div', { style: 'font-size:16px;' }, level.name + (level.builtIn ? ' (built-in)' : '')),
         level.bestTime !== undefined && level.bestTime !== null
-          ? el('div', { style: 'font-size:12px; color:#888;' }, `Best: ${level.bestTime.toFixed(2)}s`)
-          : el('div', { style: 'font-size:12px; color:#666;' }, 'No time yet'),
+          ? el('div', { style: `font-size:12px; color:${this._dimText};` }, `Best: ${level.bestTime.toFixed(2)}s`)
+          : el('div', { style: `font-size:12px; color:${this._dimTextDark};` }, 'No time yet'),
       );
 
       row.appendChild(info);
@@ -245,8 +263,9 @@ export class UIManager {
 
       if (!level.builtIn) {
         const delBtn = el('button', {
-          style: `padding:4px 8px; font-size:12px; background:rgba(255,100,100,0.2); color:#ff6b6b;
-                  border:1px solid rgba(255,100,100,0.3); border-radius:3px; cursor:pointer;`,
+          style: `padding:4px 8px; font-size:12px; background:${C.rgba(C.warn, 0.2)};`
+            + ` color:${C.warn}; border:1px solid ${C.rgba(C.warn, 0.3)};`
+            + ` border-radius:3px; cursor:pointer;`,
           textContent: 'X',
         });
         delBtn.addEventListener('click', (e) => {
@@ -313,8 +332,6 @@ export class UIManager {
   }
 
   updateHUD() {
-    // HUD is updated in main.js tick; this is a no-op for now.
-    // Individual HUD elements (timer, speed, state) are updated directly
-    // by main.js since the HUD is always present in the DOM.
+    // HUD is updated in main.js tick
   }
 }

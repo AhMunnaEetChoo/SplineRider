@@ -5,14 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Spline Rider</title>
   <style>
+    :root {
+      --color-bg: #191930;
+      --color-bg-secondary: #263d6e;
+      --color-accent: #2f729e;
+      --color-warn: #eba254;
+      --color-highlight: #f5d689;
+      --color-text: #fff5d9;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; touch-action: manipulation; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: var(--color-bg); touch-action: manipulation; }
     canvas { display: block; }
     #ui {
       position: absolute;
       top: 16px;
       left: 16px;
-      color: #fff;
+      color: var(--color-text);
       font-family: monospace;
       font-size: 14px;
       pointer-events: none;
@@ -25,12 +33,12 @@
     <div id="speed">Speed: 0.0</div>
     <div id="state">State: idle</div>
   </div>
-  <div id="win-message" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#ffe66d; font-family:monospace; font-size:48px; pointer-events:none; text-shadow:0 0 20px #ffe66d;">You Win!</div>
+  <div id="win-message" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:var(--color-highlight); font-family:monospace; font-size:48px; pointer-events:none; text-shadow:0 0 20px var(--color-highlight);">You Win!</div>
   <script>
     window.addEventListener('error', function(e) {
       if (e.target.tagName === 'SCRIPT' && e.target.src && e.target.src.includes('unpkg.com')) {
         var msg = document.createElement('div');
-        msg.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#ff6b6b;font-family:monospace;font-size:16px;text-align:center;max-width:80%;';
+        msg.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--color-warn);font-family:monospace;font-size:16px;text-align:center;max-width:80%;';
         msg.textContent = 'Failed to load game assets. Please check your internet connection and try again.';
         document.body.appendChild(msg);
         document.getElementById('ui').style.display = 'none';

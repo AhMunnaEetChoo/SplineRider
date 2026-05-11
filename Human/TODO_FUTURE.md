@@ -1,6 +1,6 @@
 # TODO FUTURE
 
-
+- add a start position as level configuration.
 
 - magnetize spring to the spline before snapping a short distance rather than a full snap. could be visual only not sure
 

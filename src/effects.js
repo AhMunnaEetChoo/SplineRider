@@ -1,6 +1,7 @@
 // Simple particle effects system using THREE.Points
 
 import * as THREE from 'three';
+import { Colors } from './colors.js';
 
 const MAX_PARTICLES = 100;
 
@@ -14,7 +15,7 @@ export class Effects {
     canvas.width = 16;
     canvas.height = 16;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = Colors.text;
     ctx.beginPath();
     ctx.arc(8, 8, 6, 0, Math.PI * 2);
     ctx.fill();
@@ -30,7 +31,7 @@ export class Effects {
       depthWrite: false,
       transparent: true,
       opacity: 0.8,
-      color: '#ffffff',
+      color: Colors.text,
     });
 
     this.points = new THREE.Points(geo, mat);
@@ -39,7 +40,7 @@ export class Effects {
   }
 
   emit(position, count, config = {}) {
-    const color = new THREE.Color(config.color || '#ffffff');
+    const color = new THREE.Color(config.color || Colors.text);
     const speed = config.speed || 100;
     const lifetime = config.lifetime || 0.5;
 
@@ -60,7 +61,7 @@ export class Effects {
 
   emitLaunch(position) {
     this.emit(position, 10, {
-      color: '#ff9944',
+      color: Colors.warn,
       speed: 120,
       lifetime: 0.5,
     });
@@ -68,7 +69,7 @@ export class Effects {
 
   emitAttach(position) {
     this.emit(position, 6, {
-      color: '#ffffff',
+      color: Colors.text,
       speed: 60,
       lifetime: 0.3,
     });
@@ -76,7 +77,7 @@ export class Effects {
 
   emitDeath(position) {
     this.emit(position, 15, {
-      color: '#ff4444',
+      color: Colors.warn,
       speed: 150,
       lifetime: 0.6,
     });

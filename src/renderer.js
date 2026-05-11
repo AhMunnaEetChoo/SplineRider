@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { Spline } from './spline.js';
+import { Colors } from './colors.js';
 
 export class Renderer {
   constructor() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color('#1a1a2e');
+    this.scene.background = new THREE.Color(Colors.bg);
 
     const aspect = window.innerWidth / window.innerHeight;
     const viewSize = 500;
@@ -36,14 +37,14 @@ export class Renderer {
 
     // Player dot (always in scene)
     const dotGeo = new THREE.CircleGeometry(12, 32);
-    const dotMat = new THREE.MeshBasicMaterial({ color: '#ff6b6b' });
+    const dotMat = new THREE.MeshBasicMaterial({ color: Colors.warn });
     this.playerDot = new THREE.Mesh(dotGeo, dotMat);
     this.scene.add(this.playerDot);
 
     // Player glow (visible when riding)
     const glowGeo = new THREE.CircleGeometry(20, 32);
     const glowMat = new THREE.MeshBasicMaterial({
-      color: '#ff9944',
+      color: Colors.warn,
       transparent: true,
       opacity: 0.35,
       blending: THREE.AdditiveBlending,
@@ -71,7 +72,7 @@ export class Renderer {
     canvas.width = 512;
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff44';
+    ctx.fillStyle = Colors.rgba(Colors.text, 0.27);
     ctx.font = '16px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('Hold SPACE or click to ride | Release to launch | R to reset', 256, 32);
@@ -115,7 +116,7 @@ export class Renderer {
   }
 
   _buildGameView(splines, goalPosition, startPosition) {
-    const mat = new THREE.LineBasicMaterial({ color: '#4ecdc4' });
+    const mat = new THREE.LineBasicMaterial({ color: Colors.accent });
     for (const spline of splines) {
       const geo = spline.createLineGeometry(64);
       const line = new THREE.Line(geo, mat);
@@ -127,14 +128,14 @@ export class Renderer {
         ? new THREE.Vector2(startPosition.x, startPosition.y)
         : splines[0].pointAt(0);
       const startGeo = new THREE.CircleGeometry(10, 32);
-      const startMat = new THREE.MeshBasicMaterial({ color: '#4ecdc4' });
+      const startMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
       this.startMarker = new THREE.Mesh(startGeo, startMat);
       this.startMarker.position.set(startPos.x, startPos.y, 0.02);
       this.scene.add(this.startMarker);
 
       const endPos = goalPosition || splines[splines.length - 1].pointAt(1);
       const goalGeo = new THREE.RingGeometry(30, 36, 32);
-      const goalMat = new THREE.MeshBasicMaterial({ color: '#ffe66d', side: THREE.DoubleSide });
+      const goalMat = new THREE.MeshBasicMaterial({ color: Colors.highlight, side: THREE.DoubleSide });
       this.goalMarker = new THREE.Mesh(goalGeo, goalMat);
       this.goalMarker.position.set(endPos.x, endPos.y, 0.02);
       this.scene.add(this.goalMarker);
@@ -176,8 +177,8 @@ export class Renderer {
   }
 
   _buildEditorView(splinesData, startInfo, goalPos) {
-    const lineMat = new THREE.LineBasicMaterial({ color: '#4ecdc4' });
-    const dotMat = new THREE.MeshBasicMaterial({ color: '#4ecdc4' });
+    const lineMat = new THREE.LineBasicMaterial({ color: Colors.accent });
+    const dotMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
 
     for (let i = 0; i < splinesData.length; i++) {
       const s = splinesData[i];
@@ -206,14 +207,14 @@ export class Renderer {
     const startSpline = new Spline(startSplineData.points.map(p => new THREE.Vector2(p.x, p.y)));
     const startPos = startSpline.pointAt(startInfo.t);
     const startGeo = new THREE.CircleGeometry(10, 32);
-    const startMat = new THREE.MeshBasicMaterial({ color: '#4ecdc4' });
+    const startMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
     this.startMarker = new THREE.Mesh(startGeo, startMat);
     this.startMarker.position.set(startPos.x, startPos.y, 0.04);
     this.scene.add(this.startMarker);
 
     // Goal marker
     const goalGeo = new THREE.RingGeometry(30, 36, 32);
-    const goalMat = new THREE.MeshBasicMaterial({ color: '#ffe66d', side: THREE.DoubleSide });
+    const goalMat = new THREE.MeshBasicMaterial({ color: Colors.highlight, side: THREE.DoubleSide });
     this.goalMarker = new THREE.Mesh(goalGeo, goalMat);
     this.goalMarker.position.set(goalPos.x, goalPos.y, 0.04);
     this.scene.add(this.goalMarker);
@@ -248,7 +249,7 @@ export class Renderer {
       }
       dots = [];
       const isHighlighted = (index === this._editorSelectedIndex);
-      const color = isHighlighted ? '#ffe66d' : '#4ecdc4';
+      const color = isHighlighted ? Colors.highlight : Colors.accent;
       const dotMat = new THREE.MeshBasicMaterial({ color });
       for (let pi = 0; pi < s.points.length; pi++) {
         const dotGeo = new THREE.CircleGeometry(6, 16);
@@ -269,8 +270,8 @@ export class Renderer {
     if (index === this._editorSelectedIndex) return;
     this._editorSelectedIndex = index;
 
-    const defaultColor = '#4ecdc4';
-    const highlightColor = '#ffe66d';
+    const defaultColor = Colors.accent;
+    const highlightColor = Colors.highlight;
 
     for (let i = 0; i < this._editorSplineLines.length; i++) {
       const color = (i === index) ? highlightColor : defaultColor;

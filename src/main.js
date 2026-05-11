@@ -8,6 +8,9 @@ import { Editor } from './editor.js';
 import { Effects } from './effects.js';
 import * as storage from './storage.js';
 import { BUILT_IN_LEVELS, DEFAULT_LEVEL } from './levels.js';
+import { initColors } from './colors.js';
+
+await initColors();
 
 export const renderer = new Renderer();
 const input = new Input();
@@ -52,6 +55,7 @@ function showScreen(id, data) {
   ui.showScreen(id, data);
 
   if (id === 'play') {
+    isPaused = false;
     editor.deactivate();
     renderer.showGameView(game.splines, game.goalPosition, currentLevelData.startPosition);
   } else if (id === 'editor') {
