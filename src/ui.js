@@ -83,25 +83,61 @@ export class UIManager {
     );
     document.body.appendChild(this.screens.pause);
 
-    // Editor Toolbar
-    this.editorToolbar = el('div', { id: 'editor-toolbar', style: `display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%); gap:6px; z-index:5; pointer-events:all;` },
-      btn('Pan', 'btn-toggle-mode'),
-      btn('- Spline', 'btn-delete-spline'),
-      btn('Save', 'btn-save-level'),
-      btn('Load', 'btn-load-level'),
-      btn('Export', 'btn-export-level'),
-      btn('Import', 'btn-import-level'),
-      btn('Test', 'btn-test-level'),
-      btn('Back', 'btn-editor-back'),
+    // Editor Toolbar — 5 primary items + "More" dropdown for secondary actions
+    const TB_STYLE = `padding:6px 14px; font-family:monospace; font-size:13px;
+      color:#fff; background:rgba(255,255,255,0.1);
+      border:1px solid rgba(255,255,255,0.3); border-radius:4px; cursor:pointer;`;
+    const tbBtn = (text, id) => el('button', { id, textContent: text, style: TB_STYLE });
+
+    this.editorToolbar = el('div', {
+      id: 'editor-toolbar',
+      style: `display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%);
+              gap:6px; z-index:5; pointer-events:all;`
+    },
+      tbBtn('Pan', 'btn-toggle-mode'),
+      tbBtn('- Spline', 'btn-delete-spline'),
+
+      // "More" dropdown
+      el('div', { style: 'position:relative; display:inline-flex;' },
+        el('button', {
+          id: 'btn-more-menu',
+          textContent: '☰ More',
+          style: TB_STYLE,
+        }),
+        el('div', {
+          id: 'editor-more-dropdown',
+          style: `display:none; position:absolute; top:100%; right:0; margin-top:4px;
+                  flex-direction:column; gap:2px; background:#1e1e3a;
+                  border:1px solid #444; border-radius:4px; padding:4px; z-index:15;`
+        },
+          el('button', { id: 'btn-save-level', textContent: 'Save', style: TB_STYLE }),
+          el('button', { id: 'btn-load-level', textContent: 'Load', style: TB_STYLE }),
+          el('button', { id: 'btn-export-level', textContent: 'Export', style: TB_STYLE }),
+          el('button', { id: 'btn-import-level', textContent: 'Import', style: TB_STYLE }),
+        )
+      ),
+
+      tbBtn('Test', 'btn-test-level'),
+      tbBtn('Back', 'btn-editor-back'),
     );
-    // Make toolbar buttons smaller
-    this.editorToolbar.querySelectorAll('button').forEach(b => {
-      b.style.padding = '6px 14px';
-      b.style.fontSize = '13px';
-      b.style.minWidth = 'auto';
-    });
     document.body.appendChild(this.editorToolbar);
     document.getElementById('btn-delete-spline').disabled = true;
+
+    // Dropdown toggle + outside-click close
+    const moreBtn = document.getElementById('btn-more-menu');
+    const dropdown = document.getElementById('editor-more-dropdown');
+    moreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.style.display = dropdown.style.display === 'flex' ? 'none' : 'flex';
+    });
+    dropdown.addEventListener('click', (e) => {
+      if (e.target.tagName === 'BUTTON') dropdown.style.display = 'none';
+    });
+    window.addEventListener('click', (e) => {
+      if (!moreBtn.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.style.display = 'none';
+      }
+    });
 
     // Import modal
     this._importModal = el('div', { style: `display:none; position:absolute; top:0; left:0; width:100%; height:100%; z-index:20; pointer-events:all;` },
@@ -121,6 +157,18 @@ export class UIManager {
     this._toast = el('div', { style: `display:none; position:absolute; bottom:40px; left:50%; transform:translateX(-50%); padding:8px 20px; background:rgba(0,0,0,0.8); color:#4ecdc4; font-family:monospace; font-size:14px; border-radius:4px; z-index:30; pointer-events:none;` });
     document.body.appendChild(this._toast);
     this._toastTimer = null;
+
+    // Mobile pause button — visible during gameplay
+    this.pauseBtn = el('button', {
+      id: 'btn-mobile-pause',
+      textContent: '❚❚',
+      style: `display:none; position:absolute; top:16px; right:16px; width:42px; height:42px;
+              z-index:15; pointer-events:all; border-radius:50%;
+              border:2px solid rgba(255,255,255,0.4);
+              background:rgba(0,0,0,0.35); color:#fff; font-size:18px;
+              line-height:1; cursor:pointer;`
+    });
+    document.body.appendChild(this.pauseBtn);
   }
 
   on(buttonId, callback) {
@@ -138,10 +186,13 @@ export class UIManager {
       this.screens[key].style.display = 'none';
     }
     this.editorToolbar.style.display = 'none';
+    this.pauseBtn.style.display = 'none';
 
     // Show requested screen
     if (id === 'editor') {
       this.editorToolbar.style.display = 'flex';
+    } else if (id === 'play') {
+      this.pauseBtn.style.display = 'block';
     } else if (this.screens[id]) {
       this.screens[id].style.display = 'flex';
     }

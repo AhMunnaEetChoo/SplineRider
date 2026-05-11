@@ -11,7 +11,7 @@ import { BUILT_IN_LEVELS, DEFAULT_LEVEL } from './levels.js';
 
 export const renderer = new Renderer();
 const input = new Input();
-const touchInput = new TouchInput();
+const touchInput = new TouchInput(renderer.renderer.domElement);
 const ui = new UIManager();
 const editor = new Editor(renderer);
 editor.onSelectionChange = (splineIndex) => {
@@ -32,7 +32,7 @@ const composedInput = {
     return input.isDown(key);
   },
   consumeJustPressed(key) {
-    return input.consumeJustPressed(key);
+    return input.consumeJustPressed(key) || touchInput.consumeJustPressed(key);
   },
   endFrame() {
     input.endFrame();
@@ -172,6 +172,14 @@ ui.on('btn-pause-restart', () => {
 
 ui.on('btn-pause-menu', () => {
   showScreen('start');
+});
+
+// Mobile pause button (visible during gameplay)
+ui.on('btn-mobile-pause', () => {
+  if (currentScreen === 'play') {
+    isPaused = true;
+    showScreen('pause');
+  }
 });
 
 // Editor toolbar
@@ -315,7 +323,7 @@ function tick() {
   if (dt > 0.1) dt = 0.016;
 
   // Pause toggle
-  if (input.consumeJustPressed('Escape') || input.consumeJustPressed('p')) {
+  if (input.consumeJustPressed('Escape') || input.consumeJustPressed('p') || touchInput.consumeJustPressed('tap')) {
     if (currentScreen === 'play') {
       isPaused = true;
       showScreen('pause');
