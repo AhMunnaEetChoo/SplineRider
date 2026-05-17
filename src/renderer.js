@@ -62,6 +62,7 @@ export class Renderer {
     this._editorSplineLines = [];
     this._editorSplineDots = [];
     this._editorSelectedIndex = -1;
+    this._smoothedLookTarget = new THREE.Vector2();
   }
 
   // ---- Game View ----
@@ -106,6 +107,7 @@ export class Renderer {
       const startPos = startPosition
         ? new THREE.Vector2(startPosition.x, startPosition.y)
         : splines[0].pointAt(0);
+      this._smoothedLookTarget.set(startPos.x, startPos.y);
       const startGeo = new THREE.CircleGeometry(10, 32);
       const startMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
       this.startMarker = new THREE.Mesh(startGeo, startMat);
@@ -310,10 +312,25 @@ export class Renderer {
       this.playerGlow.material.opacity = seeking ? 0.15 : 0.35;
     }
 
-    this.camera.position.lerp(
-      new THREE.Vector3(pos.x, pos.y, 100),
-      0.1
-    );
+    const LOOKAHEAD_DISTANCE = 400;
+    const LOOKAHEAD_SMOOTHING = 0.03;
+    const dir = player.getVelocityDirection();
+    if (dir) {
+      const rawTarget = new THREE.Vector2(
+        pos.x + dir.x * LOOKAHEAD_DISTANCE,
+        pos.y + dir.y * LOOKAHEAD_DISTANCE
+      );
+      this._smoothedLookTarget.lerp(rawTarget, LOOKAHEAD_SMOOTHING);
+      this.camera.position.lerp(
+        new THREE.Vector3(this._smoothedLookTarget.x, this._smoothedLookTarget.y, 100),
+        0.15
+      );
+    } else {
+      this.camera.position.lerp(
+        new THREE.Vector3(pos.x, pos.y, 100),
+        0.15
+      );
+    }
   }
 
   render() {
