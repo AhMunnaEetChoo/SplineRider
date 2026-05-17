@@ -62,27 +62,6 @@ export class Renderer {
     this._editorSplineLines = [];
     this._editorSplineDots = [];
     this._editorSelectedIndex = -1;
-
-    // Controls hint
-    this._addTextHints();
-  }
-
-  _addTextHints() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = Colors.rgba(Colors.text, 0.27);
-    ctx.font = '16px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Hold SPACE or click to ride | Release to launch | R to reset', 256, 32);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(512, 64, 1);
-    sprite.position.set(0, 280, 0);
-    this.scene.add(sprite);
   }
 
   // ---- Game View ----

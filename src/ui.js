@@ -187,7 +187,7 @@ export class UIManager {
       style: `display:none; position:absolute; top:45%; left:50%; transform:translate(-50%,-50%);`
         + ` color:${C.text}; font-family:monospace; font-size:36px;`
         + ` pointer-events:none; z-index:12;`
-    }, 'Ready!');
+    }, 'Hold To Ride!');
     document.body.appendChild(this._readyOverlay);
 
     this._goOverlay = el('div', {

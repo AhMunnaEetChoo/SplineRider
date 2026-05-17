@@ -1,7 +1,7 @@
 # TODO FUTURE
 
-- improve the spline rendering, add a thickness and relate the segment count to the catmull node count for consistency
-
+- Add a replay button on level complete
+- Add an instant restart button next to pause
 - investigate catmull node frequency and spline editing.
 - allow there to be 0 splines in a level
 
