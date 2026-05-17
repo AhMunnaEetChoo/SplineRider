@@ -40,6 +40,7 @@ export class UIManager {
     this.screens = {};
     this._callbacks = {};
     this._overlayTimer = null;
+    this._winTimer = null;
     this._buildScreens();
   }
 
@@ -77,8 +78,10 @@ export class UIManager {
       el('div', { style: this._titleStyle }, 'You Win!'),
       el('div', { id: 'win-time', style: 'font-size:28px; margin-bottom:8px;' }),
       el('div', { id: 'win-best', style: `font-size:18px; color:${this._dimText}; margin-bottom:20px;` }),
-      this._btn('Replay', 'btn-win-replay'),
-      this._btn('Menu', 'btn-win-menu'),
+      el('div', { id: 'win-next-buttons', style: 'display:none;' },
+        this._btn('Next Level', 'btn-win-next'),
+        this._btn('Level Select', 'btn-win-levels'),
+      ),
     );
     document.body.appendChild(this.screens.win);
 
@@ -257,6 +260,18 @@ export class UIManager {
       } else {
         document.getElementById('win-best').textContent = '';
       }
+
+      const nextDiv = document.getElementById('win-next-buttons');
+      nextDiv.style.display = 'none';
+      if (data.showNextButtons) {
+        const nextBtn = document.getElementById('btn-win-next');
+        nextBtn.style.display = data.hasNextLevel ? '' : 'none';
+        if (this._winTimer) clearTimeout(this._winTimer);
+        this._winTimer = setTimeout(() => {
+          nextDiv.style.display = '';
+          this._winTimer = null;
+        }, 1500);
+      }
     }
 
     if (id === 'levels') {
@@ -271,6 +286,8 @@ export class UIManager {
     const levels = data.levels || [];
     const onSelect = data.onSelect;
     const onDelete = data.onDelete;
+    const nextIndex = data.nextIndex;
+    const isLevelCompleted = data.isLevelCompleted || (() => false);
 
     if (levels.length === 0) {
       list.appendChild(el('div', { style: `color:${this._dimText}; padding:10px;` }, 'No levels found.'));
@@ -279,21 +296,34 @@ export class UIManager {
 
     const C = Colors;
 
-    for (const level of levels) {
+    for (let i = 0; i < levels.length; i++) {
+      const level = levels[i];
+      const completed = isLevelCompleted(level.name);
+      const isBuiltIn = level.builtIn;
+      const locked = isBuiltIn && !completed && nextIndex !== undefined && i !== nextIndex;
+
       const row = el('div', {
         style: `display:flex; justify-content:space-between; align-items:center; padding:10px; margin:4px 0;`
-          + ` background:${C.rgba(C.text, 0.05)}; border-radius:4px; cursor:pointer;`
+          + ` background:${C.rgba(C.text, 0.05)}; border-radius:4px;`
+          + (locked
+            ? ` opacity:0.35; pointer-events:none;`
+            : ' cursor:pointer;'),
       });
 
+      let nameText = level.name + (level.builtIn ? ' (built-in)' : '');
+      if (completed) nameText = '✓ ' + nameText;
+
       const info = el('div', {},
-        el('div', { style: 'font-size:16px;' }, level.name + (level.builtIn ? ' (built-in)' : '')),
+        el('div', { style: `font-size:16px; color:${completed ? C.highlight : C.text};` }, nameText),
         level.bestTime !== undefined && level.bestTime !== null
           ? el('div', { style: `font-size:12px; color:${this._dimText};` }, `Best: ${level.bestTime.toFixed(2)}s`)
-          : el('div', { style: `font-size:12px; color:${this._dimTextDark};` }, 'No time yet'),
+          : el('div', { style: `font-size:12px; color:${locked ? this._dimTextDark : this._dimText};` }, locked ? 'Locked' : 'No time yet'),
       );
 
       row.appendChild(info);
-      row.addEventListener('click', () => onSelect && onSelect(level));
+      if (!locked) {
+        row.addEventListener('click', () => onSelect && onSelect(level));
+      }
 
       if (!level.builtIn) {
         const delBtn = el('button', {

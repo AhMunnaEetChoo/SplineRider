@@ -85,7 +85,6 @@ game.onWin = (time) => {
   const bestTime = storage.getBestTime(levelName);
 
   if (isTestPlay) {
-    // Brief pause then return to editor
     setTimeout(() => {
       _restoreEditorCamera();
       showScreen('editor');
@@ -93,7 +92,10 @@ game.onWin = (time) => {
     }, 1500);
     ui.showScreen('win', { time, bestTime, isNewBest });
   } else {
-    showScreen('win', { time, bestTime, isNewBest });
+    storage.markLevelCompleted(levelName);
+    const currentIdx = BUILT_IN_LEVELS.findIndex(l => l.name === levelName);
+    const hasNextLevel = currentIdx >= 0 && currentIdx < BUILT_IN_LEVELS.length - 1;
+    showScreen('win', { time, bestTime, isNewBest, showNextButtons: true, hasNextLevel });
   }
 };
 
@@ -138,8 +140,7 @@ game.onStateChange = (newState) => {
 
 // Start screen
 ui.on('btn-start-play', () => {
-  game.loadLevel(currentLevelData);
-  showScreen('play');
+  _showLevelSelect();
 });
 
 ui.on('btn-start-editor', () => {
@@ -157,13 +158,17 @@ ui.on('btn-levels-back', () => {
 });
 
 // Win screen
-ui.on('btn-win-replay', () => {
-  game.loadLevel(currentLevelData);
-  showScreen('play');
+ui.on('btn-win-next', () => {
+  const currentIdx = BUILT_IN_LEVELS.findIndex(l => l.name === currentLevelData.name);
+  if (currentIdx >= 0 && currentIdx < BUILT_IN_LEVELS.length - 1) {
+    currentLevelData = BUILT_IN_LEVELS[currentIdx + 1];
+    game.loadLevel(currentLevelData);
+    showScreen('play');
+  }
 });
 
-ui.on('btn-win-menu', () => {
-  showScreen('start');
+ui.on('btn-win-levels', () => {
+  _showLevelSelect();
 });
 
 // Death screen
@@ -304,8 +309,22 @@ function _showLevelSelect() {
   }));
   const all = [...levels, ...builtIn];
 
+  let nextIndex = 0;
+  for (let i = 0; i < BUILT_IN_LEVELS.length; i++) {
+    if (!storage.isLevelCompleted(BUILT_IN_LEVELS[i].name)) {
+      nextIndex = i;
+      break;
+    }
+    nextIndex = i + 1;
+  }
+  // Offset by custom levels since they come first in the combined list
+  const builtInOffset = levels.length;
+  const displayNextIndex = nextIndex < BUILT_IN_LEVELS.length ? builtInOffset + nextIndex : nextIndex;
+
   ui.showScreen('levels', {
     levels: all,
+    nextIndex: displayNextIndex,
+    isLevelCompleted: (name) => storage.isLevelCompleted(name),
     onSelect: (level) => {
       if (level.builtIn) {
         currentLevelData = BUILT_IN_LEVELS.find(l => l.name === level.name);

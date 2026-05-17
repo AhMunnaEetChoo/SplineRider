@@ -6,6 +6,7 @@ import { Spline } from './spline.js';
 const LEVEL_LIST_KEY = 'splineRider_levelList';
 const LEVEL_PREFIX = 'splineRider_level_';
 const BEST_PREFIX = 'splineRider_best_';
+const COMPLETED_PREFIX = 'splineRider_completed_';
 
 function _normalizeLevelData(data) {
   if (data.startPosition && typeof data.startPosition.x === 'number' && typeof data.startPosition.y === 'number') {
@@ -92,6 +93,14 @@ export function getBestTime(levelName) {
   if (!raw) return null;
   const val = parseFloat(raw);
   return isNaN(val) ? null : val;
+}
+
+export function markLevelCompleted(levelName) {
+  localStorage.setItem(COMPLETED_PREFIX + levelName, '1');
+}
+
+export function isLevelCompleted(levelName) {
+  return localStorage.getItem(COMPLETED_PREFIX + levelName) === '1';
 }
 
 export function exportLevelJson(levelData) {
