@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 
+export const SUB_PER_SEGMENT = 32;
+const TUBE_RADIUS = 5;
+const TUBE_RADIAL_SEGMENTS = 8;
+
 // Catmull-Rom spline — multi-segment path defined by through-points
 export class Spline {
   constructor(points) {
@@ -61,7 +65,8 @@ export class Spline {
     return { t: bestT, point: bestPoint, distance: Math.sqrt(bestDist) };
   }
 
-  samplePoints(count = 64) {
+  samplePoints(count) {
+    if (count === undefined) count = this.numSegments * SUB_PER_SEGMENT;
     const pts = [];
     for (let i = 0; i <= count; i++) {
       pts.push(this.pointAt(i / count));
@@ -69,7 +74,8 @@ export class Spline {
     return pts;
   }
 
-  createLineGeometry(count = 64) {
+  createLineGeometry(count) {
+    if (count === undefined) count = this.numSegments * SUB_PER_SEGMENT;
     const sampled = this.samplePoints(count);
     const verts = [];
     for (const p of sampled) {
@@ -78,6 +84,14 @@ export class Spline {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
     return geo;
+  }
+
+  createTubeGeometry(radius = TUBE_RADIUS) {
+    const tubularSegments = this.numSegments * SUB_PER_SEGMENT;
+    const sampled = this.samplePoints(tubularSegments);
+    const pts3 = sampled.map(p => new THREE.Vector3(p.x, p.y, 0));
+    const curve = new THREE.CatmullRomCurve3(pts3, false, 'catmullrom');
+    return new THREE.TubeGeometry(curve, tubularSegments, radius, TUBE_RADIAL_SEGMENTS, false);
   }
 
   arcLength(samples = 100) {

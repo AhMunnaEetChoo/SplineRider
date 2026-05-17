@@ -116,11 +116,11 @@ export class Renderer {
   }
 
   _buildGameView(splines, goalPosition, startPosition) {
-    const mat = new THREE.LineBasicMaterial({ color: Colors.accent });
+    const mat = new THREE.MeshBasicMaterial({ color: Colors.accent });
     for (const spline of splines) {
-      const geo = spline.createLineGeometry(64);
-      const line = new THREE.Line(geo, mat);
-      this.gameViewGroup.add(line);
+      const geo = spline.createTubeGeometry();
+      const mesh = new THREE.Mesh(geo, mat);
+      this.gameViewGroup.add(mesh);
     }
 
     if (splines.length > 0) {
@@ -130,14 +130,14 @@ export class Renderer {
       const startGeo = new THREE.CircleGeometry(10, 32);
       const startMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
       this.startMarker = new THREE.Mesh(startGeo, startMat);
-      this.startMarker.position.set(startPos.x, startPos.y, 0.02);
+      this.startMarker.position.set(startPos.x, startPos.y, 10);
       this.scene.add(this.startMarker);
 
       const endPos = goalPosition || splines[splines.length - 1].pointAt(1);
       const goalGeo = new THREE.RingGeometry(30, 36, 32);
       const goalMat = new THREE.MeshBasicMaterial({ color: Colors.highlight, side: THREE.DoubleSide });
       this.goalMarker = new THREE.Mesh(goalGeo, goalMat);
-      this.goalMarker.position.set(endPos.x, endPos.y, 0.02);
+      this.goalMarker.position.set(endPos.x, endPos.y, 10);
       this.scene.add(this.goalMarker);
     }
   }
@@ -177,25 +177,25 @@ export class Renderer {
   }
 
   _buildEditorView(splinesData, startPosition, goalPos) {
-    const lineMat = new THREE.LineBasicMaterial({ color: Colors.accent });
+    const tubeMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
     const dotMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
 
     for (let i = 0; i < splinesData.length; i++) {
       const s = splinesData[i];
       const spline = new Spline(s.points.map(p => new THREE.Vector2(p.x, p.y)));
 
-      // Curve line
-      const geo = spline.createLineGeometry(64);
-      const line = new THREE.Line(geo, lineMat.clone());
-      this.editorViewGroup.add(line);
-      this._editorSplineLines.push({ spline, line, geo });
+      // Tube mesh
+      const geo = spline.createTubeGeometry();
+      const mesh = new THREE.Mesh(geo, tubeMat.clone());
+      this.editorViewGroup.add(mesh);
+      this._editorSplineLines.push({ spline, mesh });
 
       // Knot dots
       const dots = [];
       for (const p of s.points) {
         const dotGeo = new THREE.CircleGeometry(6, 16);
         const dot = new THREE.Mesh(dotGeo, dotMat.clone());
-        dot.position.set(p.x, p.y, 0.03);
+        dot.position.set(p.x, p.y, 10);
         this.editorViewGroup.add(dot);
         dots.push(dot);
       }
@@ -206,14 +206,14 @@ export class Renderer {
     const startGeo = new THREE.CircleGeometry(10, 32);
     const startMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
     this.startMarker = new THREE.Mesh(startGeo, startMat);
-    this.startMarker.position.set(startPosition.x, startPosition.y, 0.04);
+    this.startMarker.position.set(startPosition.x, startPosition.y, 10);
     this.scene.add(this.startMarker);
 
     // Goal marker
     const goalGeo = new THREE.RingGeometry(30, 36, 32);
     const goalMat = new THREE.MeshBasicMaterial({ color: Colors.highlight, side: THREE.DoubleSide });
     this.goalMarker = new THREE.Mesh(goalGeo, goalMat);
-    this.goalMarker.position.set(goalPos.x, goalPos.y, 0.04);
+    this.goalMarker.position.set(goalPos.x, goalPos.y, 10);
     this.scene.add(this.goalMarker);
   }
 
@@ -226,13 +226,18 @@ export class Renderer {
     // Rebuild the Spline instance from points
     entry.spline = new Spline(s.points.map(p => new THREE.Vector2(p.x, p.y)));
 
-    const sampled = entry.spline.samplePoints(64);
-    const verts = entry.geo.attributes.position.array;
-    for (let i = 0; i < sampled.length; i++) {
-      verts[i * 3] = sampled[i].x;
-      verts[i * 3 + 1] = sampled[i].y;
-    }
-    entry.geo.attributes.position.needsUpdate = true;
+    // Rebuild tube mesh
+    const isHighlighted = (index === this._editorSelectedIndex);
+    const color = isHighlighted ? Colors.highlight : Colors.accent;
+    const oldMesh = entry.mesh;
+    const newGeo = entry.spline.createTubeGeometry();
+    const newMesh = new THREE.Mesh(newGeo, new THREE.MeshBasicMaterial({ color }));
+    newMesh.position.copy(oldMesh.position);
+    this.editorViewGroup.add(newMesh);
+    this.editorViewGroup.remove(oldMesh);
+    if (oldMesh.geometry) oldMesh.geometry.dispose();
+    if (oldMesh.material) oldMesh.material.dispose();
+    entry.mesh = newMesh;
 
     // Update knot dots — rebuild if count changed
     let dots = this._editorSplineDots[index];
@@ -272,7 +277,7 @@ export class Renderer {
 
     for (let i = 0; i < this._editorSplineLines.length; i++) {
       const color = (i === index) ? highlightColor : defaultColor;
-      this._editorSplineLines[i].line.material.color.set(color);
+      this._editorSplineLines[i].mesh.material.color.set(color);
     }
 
     for (let i = 0; i < this._editorSplineDots.length; i++) {
@@ -295,13 +300,13 @@ export class Renderer {
 
   updateEditorStartMarker(position) {
     if (this.startMarker) {
-      this.startMarker.position.set(position.x, position.y, 0.04);
+      this.startMarker.position.set(position.x, position.y, 10);
     }
   }
 
   updateEditorGoalMarker(position) {
     if (this.goalMarker) {
-      this.goalMarker.position.set(position.x, position.y, 0.04);
+      this.goalMarker.position.set(position.x, position.y, 10);
     }
   }
 
@@ -315,10 +320,10 @@ export class Renderer {
 
   updatePlayer(player, isHolding = false) {
     const pos = player.getPosition();
-    this.playerDot.position.set(pos.x, pos.y, 0.05);
+    this.playerDot.position.set(pos.x, pos.y, 10);
 
     if (this.playerGlow) {
-      this.playerGlow.position.set(pos.x, pos.y, 0.04);
+      this.playerGlow.position.set(pos.x, pos.y, 10);
       const riding = (player.getState() === 'riding');
       const seeking = !riding && isHolding && (player.getState() === 'freeFlight');
       this.playerGlow.visible = riding || seeking;
