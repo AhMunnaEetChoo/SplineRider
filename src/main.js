@@ -148,16 +148,17 @@ ui.on('btn-start-editor', () => {
   showScreen('editor');
 });
 
-ui.on('btn-start-levels', () => {
-  _showLevelSelect();
-});
-
 // Level select
 ui.on('btn-levels-back', () => {
   showScreen('start');
 });
 
 // Win screen
+ui.on('btn-win-replay', () => {
+  game.loadLevel(currentLevelData);
+  showScreen('play');
+});
+
 ui.on('btn-win-next', () => {
   const currentIdx = BUILT_IN_LEVELS.findIndex(l => l.name === currentLevelData.name);
   if (currentIdx >= 0 && currentIdx < BUILT_IN_LEVELS.length - 1) {
@@ -193,6 +194,12 @@ ui.on('btn-pause-restart', () => {
 
 ui.on('btn-pause-menu', () => {
   showScreen('start');
+});
+
+// Mobile restart button (visible during gameplay)
+ui.on('btn-mobile-restart', () => {
+  game.loadLevel(currentLevelData);
+  showScreen('play');
 });
 
 // Mobile pause button (visible during gameplay)

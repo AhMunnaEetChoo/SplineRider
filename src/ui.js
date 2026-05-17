@@ -61,7 +61,6 @@ export class UIManager {
       el('div', { style: this._subtitleStyle }, 'Ride the curves. Reach the goal.'),
       this._btn('Play', 'btn-start-play'),
       this._btn('Editor', 'btn-start-editor'),
-      this._btn('Levels', 'btn-start-levels'),
     );
     document.body.appendChild(this.screens.start);
 
@@ -79,6 +78,7 @@ export class UIManager {
       el('div', { id: 'win-time', style: 'font-size:28px; margin-bottom:8px;' }),
       el('div', { id: 'win-best', style: `font-size:18px; color:${this._dimText}; margin-bottom:20px;` }),
       el('div', { id: 'win-next-buttons', style: 'display:none;' },
+        this._btn('Replay', 'btn-win-replay'),
         this._btn('Next Level', 'btn-win-next'),
         this._btn('Level Select', 'btn-win-levels'),
       ),
@@ -209,6 +209,18 @@ export class UIManager {
         + ` line-height:1; cursor:pointer;`
     });
     document.body.appendChild(this.pauseBtn);
+
+    // Restart button (next to pause during gameplay)
+    this.restartBtn = el('button', {
+      id: 'btn-mobile-restart',
+      textContent: '↺',
+      style: `display:none; position:absolute; top:16px; right:66px; width:42px; height:42px;`
+        + ` z-index:15; pointer-events:all; border-radius:50%;`
+        + ` border:2px solid ${C.rgba(C.text, 0.4)};`
+        + ` background:${C.rgba(C.bg, 0.35)}; color:${C.text}; font-size:20px;`
+        + ` line-height:1; cursor:pointer;`
+    });
+    document.body.appendChild(this.restartBtn);
   }
 
   on(buttonId, callback) {
@@ -242,11 +254,13 @@ export class UIManager {
     }
     this.editorToolbar.style.display = 'none';
     this.pauseBtn.style.display = 'none';
+    this.restartBtn.style.display = 'none';
 
     if (id === 'editor') {
       this.editorToolbar.style.display = 'flex';
     } else if (id === 'play') {
       this.pauseBtn.style.display = 'block';
+      this.restartBtn.style.display = 'block';
     } else if (this.screens[id]) {
       this.screens[id].style.display = 'flex';
     }
