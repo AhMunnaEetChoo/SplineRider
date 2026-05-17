@@ -312,7 +312,7 @@ export class Renderer {
 
     this.camera.position.lerp(
       new THREE.Vector3(pos.x, pos.y, 100),
-      0.1
+      0.3
     );
   }
 
