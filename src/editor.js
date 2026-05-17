@@ -48,6 +48,7 @@ export class Editor {
     this.selectedSplineIndex = -1;
     this.dragState = null;
     this._rebuildView();
+    this.renderer.frameCamera(this.startPosition, this.goalPosition);
   }
 
   loadLevel(levelData) {
@@ -65,6 +66,7 @@ export class Editor {
     this.selectedSplineIndex = -1;
     this.dragState = null;
     this._rebuildView();
+    this.renderer.frameCamera(this.startPosition, this.goalPosition);
   }
 
   getLevelData() {

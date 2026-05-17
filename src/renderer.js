@@ -307,6 +307,12 @@ export class Renderer {
 
   // ---- Common ----
 
+  frameCamera(startPos, goalPos) {
+    const midX = (startPos.x + goalPos.x) / 2;
+    const midY = (startPos.y + goalPos.y) / 2;
+    this.camera.position.set(midX, midY, 100);
+  }
+
   updatePlayer(player, isHolding = false) {
     const pos = player.getPosition();
     this.playerDot.position.set(pos.x, pos.y, 0.05);
