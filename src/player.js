@@ -51,24 +51,6 @@ export class Player {
     };
   }
 
-  getVelocityDirection() {
-    if (this.state === State.RIDING) {
-      if (Math.abs(this.speed) < 1) return null;
-      const tangent = this.spline.tangentAt(this.t);
-      const tlen = tangent.length();
-      if (tlen < 0.0001) return null;
-      const dir = tangent.normalize();
-      if (this.speed < 0) dir.negate();
-      return dir;
-    }
-    if (this.state === State.FREE_FLIGHT) {
-      const vlen = this.velocity.length();
-      if (vlen < 1) return null;
-      return this.velocity.clone().normalize();
-    }
-    return null;
-  }
-
   isOffBottom() {
     const pos = this.getPosition();
     return pos.y < WORLD_BOTTOM;
