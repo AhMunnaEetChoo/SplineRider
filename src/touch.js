@@ -8,7 +8,7 @@ export class TouchInput {
     this._keys = {};
     this._justPressed = {};
 
-    this._onMouseDown = () => { this._keys['touchHold'] = true; };
+    this._onMouseDown = () => { this._keys['touchHold'] = true; this._justPressed['touchHold'] = true; };
     this._onMouseUp = () => { this._keys['touchHold'] = false; };
     window.addEventListener('mousedown', this._onMouseDown);
     window.addEventListener('mouseup', this._onMouseUp);
@@ -22,6 +22,7 @@ export class TouchInput {
       this._onTouchStart = (e) => {
         e.preventDefault();
         this._keys['touchHold'] = true;
+        this._justPressed['touchHold'] = true;
         if (e.touches.length === 1) {
           this._tapStartX = e.touches[0].clientX;
           this._tapStartY = e.touches[0].clientY;

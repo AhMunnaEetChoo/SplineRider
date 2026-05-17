@@ -39,6 +39,7 @@ export class UIManager {
 
     this.screens = {};
     this._callbacks = {};
+    this._overlayTimer = null;
     this._buildScreens();
   }
 
@@ -178,6 +179,22 @@ export class UIManager {
     document.body.appendChild(this._toast);
     this._toastTimer = null;
 
+    // Ready / Go overlays
+    this._readyOverlay = el('div', {
+      style: `display:none; position:absolute; top:45%; left:50%; transform:translate(-50%,-50%);`
+        + ` color:${C.text}; font-family:monospace; font-size:36px;`
+        + ` pointer-events:none; z-index:12;`
+    }, 'Ready!');
+    document.body.appendChild(this._readyOverlay);
+
+    this._goOverlay = el('div', {
+      style: `display:none; position:absolute; top:45%; left:50%; transform:translate(-50%,-50%);`
+        + ` color:${C.highlight}; font-family:monospace; font-size:48px;`
+        + ` pointer-events:none; z-index:12;`
+        + ` text-shadow:0 0 20px ${C.rgba(C.highlight, 0.42)};`
+    }, 'Go!');
+    document.body.appendChild(this._goOverlay);
+
     // Mobile pause button
     this.pauseBtn = el('button', {
       id: 'btn-mobile-pause',
@@ -199,7 +216,24 @@ export class UIManager {
     }
   }
 
+  showOverlay(type) {
+    this._readyOverlay.style.display = 'none';
+    this._goOverlay.style.display = 'none';
+    if (this._overlayTimer) { clearTimeout(this._overlayTimer); this._overlayTimer = null; }
+
+    if (type === 'ready') {
+      this._readyOverlay.style.display = 'block';
+    } else if (type === 'go') {
+      this._goOverlay.style.display = 'block';
+      this._overlayTimer = setTimeout(() => {
+        this._goOverlay.style.display = 'none';
+        this._overlayTimer = null;
+      }, 300);
+    }
+  }
+
   showScreen(id, data) {
+    this.showOverlay('hide');
     for (const key of Object.keys(this.screens)) {
       this.screens[key].style.display = 'none';
     }

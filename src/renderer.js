@@ -144,7 +144,7 @@ export class Renderer {
 
   // ---- Editor View ----
 
-  showEditorView(splinesData, startInfo, goalPos) {
+  showEditorView(splinesData, startPosition, goalPos) {
     if (this.gameViewGroup.parent) {
       this.scene.remove(this.gameViewGroup);
     }
@@ -152,7 +152,7 @@ export class Renderer {
       this.scene.add(this.editorViewGroup);
     }
     this._clearEditorView();
-    this._buildEditorView(splinesData, startInfo, goalPos);
+    this._buildEditorView(splinesData, startPosition, goalPos);
   }
 
   _clearEditorView() {
@@ -176,7 +176,7 @@ export class Renderer {
     }
   }
 
-  _buildEditorView(splinesData, startInfo, goalPos) {
+  _buildEditorView(splinesData, startPosition, goalPos) {
     const lineMat = new THREE.LineBasicMaterial({ color: Colors.accent });
     const dotMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
 
@@ -203,13 +203,10 @@ export class Renderer {
     }
 
     // Start marker
-    const startSplineData = splinesData[startInfo.splineIndex];
-    const startSpline = new Spline(startSplineData.points.map(p => new THREE.Vector2(p.x, p.y)));
-    const startPos = startSpline.pointAt(startInfo.t);
     const startGeo = new THREE.CircleGeometry(10, 32);
     const startMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
     this.startMarker = new THREE.Mesh(startGeo, startMat);
-    this.startMarker.position.set(startPos.x, startPos.y, 0.04);
+    this.startMarker.position.set(startPosition.x, startPosition.y, 0.04);
     this.scene.add(this.startMarker);
 
     // Goal marker

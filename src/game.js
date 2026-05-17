@@ -16,12 +16,15 @@ export class Game {
     this.elapsedTime = 0;
     this._lastState = null;
     this._deathFired = false;
+    this.gamePhase = 'prebuffer';  // 'prebuffer' | 'ready' | 'playing'
+    this._phaseTimer = 0;
 
     // Callbacks (set by main.js)
     this.onWin = null;
     this.onDeath = null;
     this.onStateChange = null;
     this.onReset = null;
+    this.onPhaseChange = null;
 
     this.loadLevel(levelData || DEFAULT_LEVEL);
   }
@@ -33,31 +36,46 @@ export class Game {
       levelData.goalPosition.x, levelData.goalPosition.y
     );
 
-    if (levelData.startPosition) {
-      // Free-floating start: player begins in free flight above the splines
-      const firstIdx = Math.min(levelData.startSplineIndex || 0, this.splines.length - 1);
-      this.player = new Player(this.splines[firstIdx]);
-      this.player.state = State.FREE_FLIGHT;
-      this.player.position.set(levelData.startPosition.x, levelData.startPosition.y);
-      this.player.velocity.set(0, 0);
-    } else {
-      const startIdx = Math.min(levelData.startSplineIndex || 0, this.splines.length - 1);
-      this.player = new Player(this.splines[startIdx]);
-      this.player.t = levelData.startT || 0;
-    }
+    this.player = new Player(this.splines[0]);
+    this.player.state = State.FREE_FLIGHT;
+    const sp = levelData.startPosition || this.splines[0].pointAt(0);
+    this.player.position.set(sp.x, sp.y);
+    this.player.velocity.set(0, 0);
 
     this.elapsedTime = 0;
     this._lastState = this.player.state;
     this._deathFired = false;
+    this.gamePhase = 'prebuffer';
+    this._phaseTimer = 0;
   }
 
   update(deltaTime, input) {
-    // Reset
+    // Reset (works in all phases)
     if (input.consumeJustPressed('r')) {
       this.loadLevel(this.levelData);
       if (this.onReset) this.onReset();
       return;
     }
+
+    // Phase machine — gate gameplay behind prebuffer/ready
+    if (this.gamePhase === 'prebuffer') {
+      this._phaseTimer += deltaTime;
+      if (this._phaseTimer >= 0.5) {
+        this.gamePhase = 'ready';
+        if (this.onPhaseChange) this.onPhaseChange('ready');
+      }
+      return;
+    }
+
+    if (this.gamePhase === 'ready') {
+      if (input.isDown('hold')) {
+        this.gamePhase = 'playing';
+        if (this.onPhaseChange) this.onPhaseChange('go');
+      }
+      return;
+    }
+
+    // ---- Gameplay (gamePhase === 'playing') ----
 
     this.player.update(deltaTime, input, this.splines);
 

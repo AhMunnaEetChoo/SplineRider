@@ -9,9 +9,9 @@ export const State = {
 };
 
 const GRAVITY = 400;         // px/s² downward
-const SPLINE_DRAG = 0.3;     // drag coefficient while riding
+const SPLINE_DRAG = 0.5;     // drag coefficient while riding
 const AIR_DRAG = 0.15;       // drag coefficient in free flight
-const ACCELERATION = 600;    // accel along spline (px/s²)
+const ACCELERATION = 400;    // accel along spline (px/s²)
 const WORLD_BOTTOM = -600;   // below this = death
 const SNAP_RADIUS = 40;      // max distance to snap onto a spline
 

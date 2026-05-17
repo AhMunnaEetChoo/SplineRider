@@ -35,6 +35,9 @@ const composedInput = {
     return input.isDown(key);
   },
   consumeJustPressed(key) {
+    if (key === 'hold') {
+      return input.consumeJustPressed(' ') || touchInput.consumeJustPressed('touchHold');
+    }
     return input.consumeJustPressed(key) || touchInput.consumeJustPressed(key);
   },
   endFrame() {
@@ -57,6 +60,7 @@ function showScreen(id, data) {
   if (id === 'play') {
     isPaused = false;
     editor.deactivate();
+    ui.showOverlay('hide');
     renderer.showGameView(game.splines, game.goalPosition, currentLevelData.startPosition);
   } else if (id === 'editor') {
     editor.activate();
@@ -108,6 +112,14 @@ game.onDeath = () => {
 
 game.onReset = () => {
   document.getElementById('win-message').style.display = 'none';
+};
+
+game.onPhaseChange = (phase) => {
+  if (phase === 'ready') {
+    ui.showOverlay('ready');
+  } else if (phase === 'go') {
+    ui.showOverlay('go');
+  }
 };
 
 // Track player state for particle effects

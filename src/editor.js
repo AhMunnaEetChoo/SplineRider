@@ -13,10 +13,8 @@ export class Editor {
 
     // Level state (plain data)
     this.splines = [];
-    this.startSplineIndex = 0;
-    this.startT = 0;
     this.goalPosition = { x: 0, y: 0 };
-    this.startPosition = null;
+    this.startPosition = { x: 0, y: 0 };
 
     // Selection / interaction state
     this.selectedSplineIndex = -1;
@@ -45,10 +43,8 @@ export class Editor {
         { x: 200, y: 0 },
       ],
     }];
-    this.startSplineIndex = 0;
-    this.startT = 0;
+    this.startPosition = { x: -200, y: 60 };
     this.goalPosition = { x: 200, y: 0 };
-    this.startPosition = null;
     this.selectedSplineIndex = -1;
     this.dragState = null;
     this._rebuildView();
@@ -58,32 +54,26 @@ export class Editor {
     this.splines = levelData.splines.map(s => ({
       points: s.points.map(p => ({ x: p.x, y: p.y })),
     }));
-    this.startSplineIndex = levelData.startSplineIndex || 0;
-    this.startT = levelData.startT || 0;
+    this.startPosition = {
+      x: levelData.startPosition.x,
+      y: levelData.startPosition.y,
+    };
     this.goalPosition = {
       x: levelData.goalPosition.x,
       y: levelData.goalPosition.y,
     };
-    this.startPosition = levelData.startPosition
-      ? { x: levelData.startPosition.x, y: levelData.startPosition.y }
-      : null;
     this.selectedSplineIndex = -1;
     this.dragState = null;
     this._rebuildView();
   }
 
   getLevelData() {
-    const data = {
+    return {
       name: '',
       splines: this.splines,
-      startSplineIndex: this.startSplineIndex,
-      startT: this.startT,
+      startPosition: { x: this.startPosition.x, y: this.startPosition.y },
       goalPosition: { x: this.goalPosition.x, y: this.goalPosition.y },
     };
-    if (this.startPosition) {
-      data.startPosition = { x: this.startPosition.x, y: this.startPosition.y };
-    }
-    return data;
   }
 
   activate() {
@@ -138,12 +128,9 @@ export class Editor {
         this.renderer.updateEditorSplineGeometry(ds.splineIndex, s);
       }
     } else if (ds.type === 'start') {
-      const result = this._snapToNearestSpline(m.x, m.y);
-      if (result) {
-        this.startSplineIndex = result.splineIndex;
-        this.startT = result.t;
-        this.renderer.updateEditorStartMarker(result.position);
-      }
+      this.startPosition.x = m.x;
+      this.startPosition.y = m.y;
+      this.renderer.updateEditorStartMarker(this.startPosition);
     } else if (ds.type === 'goal') {
       this.goalPosition.x = m.x;
       this.goalPosition.y = m.y;
@@ -172,18 +159,6 @@ export class Editor {
     const removedIdx = this.selectedSplineIndex;
     this.splines.splice(removedIdx, 1);
 
-    // Adjust start if needed
-    if (this.startSplineIndex >= this.splines.length) {
-      this.startSplineIndex = this.splines.length - 1;
-      this.startT = 0;
-    }
-    if (this.startSplineIndex === removedIdx) {
-      this.startSplineIndex = Math.min(removedIdx, this.splines.length - 1);
-      this.startT = 0;
-    } else if (this.startSplineIndex > removedIdx) {
-      this.startSplineIndex--;
-    }
-
     this.selectedSplineIndex = -1;
     this.dragState = null;
     this._notifySelectionChange();
@@ -195,7 +170,7 @@ export class Editor {
   _rebuildView() {
     this.renderer.showEditorView(
       this.splines,
-      { splineIndex: this.startSplineIndex, t: this.startT },
+      this.startPosition,
       this.goalPosition,
     );
     // Re-apply highlight after rebuild
@@ -310,14 +285,8 @@ export class Editor {
   }
 
   _isNearStart(worldX, worldY) {
-    const s = this.splines[this.startSplineIndex];
-    if (s.points.length < 2) return false;
-    const spline = new Spline(
-      s.points.map(p => new THREE.Vector2(p.x, p.y))
-    );
-    const pt = spline.pointAt(this.startT);
-    const dx = worldX - pt.x;
-    const dy = worldY - pt.y;
+    const dx = worldX - this.startPosition.x;
+    const dy = worldY - this.startPosition.y;
     return Math.sqrt(dx * dx + dy * dy) < 20;
   }
 
@@ -334,7 +303,7 @@ export class Editor {
     });
     this.renderer.showEditorView(
       this.splines,
-      { splineIndex: this.startSplineIndex, t: this.startT },
+      this.startPosition,
       this.goalPosition,
     );
     this.dragState = { type: 'drawing', splineIndex: newIndex };

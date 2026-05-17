@@ -1,8 +1,36 @@
 // localStorage wrapper for levels and best times
 
+import * as THREE from 'three';
+import { Spline } from './spline.js';
+
 const LEVEL_LIST_KEY = 'splineRider_levelList';
 const LEVEL_PREFIX = 'splineRider_level_';
 const BEST_PREFIX = 'splineRider_best_';
+
+function _normalizeLevelData(data) {
+  if (data.startPosition && typeof data.startPosition.x === 'number' && typeof data.startPosition.y === 'number') {
+    delete data.startSplineIndex;
+    delete data.startT;
+    return;
+  }
+
+  if (typeof data.startSplineIndex === 'number' && data.startSplineIndex >= 0 && data.startSplineIndex < data.splines.length) {
+    const idx = data.startSplineIndex;
+    const t = (typeof data.startT === 'number') ? data.startT : 0;
+    const spline = new Spline(data.splines[idx].points.map(p => new THREE.Vector2(p.x, p.y)));
+    const pt = spline.pointAt(Math.max(0, Math.min(1, t)));
+    data.startPosition = { x: pt.x, y: pt.y };
+    delete data.startSplineIndex;
+    delete data.startT;
+    return;
+  }
+
+  const first = data.splines[0];
+  const firstPt = first.points[0];
+  data.startPosition = { x: firstPt.x, y: firstPt.y + 60 };
+  delete data.startSplineIndex;
+  delete data.startT;
+}
 
 function _levelList() {
   try {
@@ -31,7 +59,9 @@ export function loadLevel(name) {
   const raw = localStorage.getItem(LEVEL_PREFIX + name);
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    const data = JSON.parse(raw);
+    _normalizeLevelData(data);
+    return data;
   } catch {
     return null;
   }
@@ -89,10 +119,6 @@ export function importLevelJson(jsonString) {
       }
     }
   }
-  if (typeof data.startSplineIndex !== 'number' ||
-      data.startSplineIndex < 0 || data.startSplineIndex >= data.splines.length) {
-    data.startSplineIndex = 0;
-  }
   if (!data.goalPosition || typeof data.goalPosition.x !== 'number' || typeof data.goalPosition.y !== 'number') {
     const last = data.splines[data.splines.length - 1];
     const lastPt = last.points[last.points.length - 1];
@@ -101,9 +127,7 @@ export function importLevelJson(jsonString) {
   if (!data.name) {
     data.name = 'Imported Level';
   }
-  if (data.startT === undefined) {
-    data.startT = 0;
-  }
 
+  _normalizeLevelData(data);
   return data;
 }
