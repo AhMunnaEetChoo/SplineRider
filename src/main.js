@@ -358,7 +358,7 @@ function tick() {
   if (dt > 0.1) dt = 0.016;
 
   // Pause toggle
-  if (input.consumeJustPressed('Escape') || input.consumeJustPressed('p') || touchInput.consumeJustPressed('tap')) {
+  if (input.consumeJustPressed('Escape') || input.consumeJustPressed('p')) {
     if (currentScreen === 'play') {
       isPaused = true;
       showScreen('pause');
