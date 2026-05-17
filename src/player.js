@@ -43,6 +43,14 @@ export class Player {
     return this.position.clone();
   }
 
+  getRenderSnapshot() {
+    return {
+      position: this.getPosition(),
+      state: this.state,
+      spline: this.spline,
+    };
+  }
+
   isOffBottom() {
     const pos = this.getPosition();
     return pos.y < WORLD_BOTTOM;

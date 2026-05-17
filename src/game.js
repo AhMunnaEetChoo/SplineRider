@@ -29,6 +29,20 @@ export class Game {
     this.loadLevel(levelData || DEFAULT_LEVEL);
   }
 
+  _syncRenderSnapshots() {
+    const snapshot = this.player.getRenderSnapshot();
+    this._previousPlayerSnapshot = this._clonePlayerSnapshot(snapshot);
+    this._currentPlayerSnapshot = this._clonePlayerSnapshot(snapshot);
+  }
+
+  _clonePlayerSnapshot(snapshot) {
+    return {
+      position: snapshot.position.clone(),
+      state: snapshot.state,
+      spline: snapshot.spline,
+    };
+  }
+
   loadLevel(levelData) {
     this.levelData = levelData;
     this.splines = _deserializeSplines(levelData.splines);
@@ -47,6 +61,28 @@ export class Game {
     this._deathFired = false;
     this.gamePhase = 'prebuffer';
     this._phaseTimer = 0;
+    this._syncRenderSnapshots();
+  }
+
+  getInterpolatedPlayerSnapshot(alpha) {
+    if (!this._previousPlayerSnapshot || !this._currentPlayerSnapshot) {
+      return this.player.getRenderSnapshot();
+    }
+
+    const previous = this._previousPlayerSnapshot;
+    const current = this._currentPlayerSnapshot;
+    const canInterpolate = previous.state === current.state && previous.spline === current.spline;
+
+    if (!canInterpolate) {
+      return this._clonePlayerSnapshot(current);
+    }
+
+    const clampedAlpha = Math.max(0, Math.min(1, alpha));
+    return {
+      position: previous.position.clone().lerp(current.position, clampedAlpha),
+      state: current.state,
+      spline: current.spline,
+    };
   }
 
   update(deltaTime, input) {
@@ -77,7 +113,9 @@ export class Game {
 
     // ---- Gameplay (gamePhase === 'playing') ----
 
+    this._previousPlayerSnapshot = this._clonePlayerSnapshot(this._currentPlayerSnapshot);
     this.player.update(deltaTime, input, this.splines);
+    this._currentPlayerSnapshot = this.player.getRenderSnapshot();
 
     // Detect state changes
     const prevState = this._lastState;
@@ -96,6 +134,7 @@ export class Game {
       const dist = this.player.getPosition().distanceTo(this.goalPosition);
       if (dist < WIN_RADIUS) {
         this.player.state = State.WIN;
+        this._currentPlayerSnapshot = this.player.getRenderSnapshot();
         if (this.onWin) this.onWin(this.elapsedTime);
       }
     }

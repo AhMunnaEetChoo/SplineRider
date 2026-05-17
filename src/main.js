@@ -53,16 +53,29 @@ let currentLevelData = DEFAULT_LEVEL;
 let isTestPlay = false;
 let _savedEditorCamera = null;
 
+const FIXED_DT = 1 / 60;
+const MAX_FRAME_TIME = 0.1;
+let lastTime = performance.now();
+let accumulator = 0;
+let isPaused = false;
+
+function resetFrameAccumulator() {
+  accumulator = 0;
+  lastTime = performance.now();
+}
+
 function showScreen(id, data) {
   currentScreen = id;
   ui.showScreen(id, data);
 
   if (id === 'play') {
     isPaused = false;
+    resetFrameAccumulator();
     editor.deactivate();
     ui.showOverlay('hide');
     renderer.showGameView(game.splines, game.goalPosition, currentLevelData.startPosition);
   } else if (id === 'editor') {
+    resetFrameAccumulator();
     editor.activate();
   }
 }
@@ -353,16 +366,12 @@ renderer.showGameView(game.splines, game.goalPosition, currentLevelData.startPos
 showScreen('start');
 
 // ---- Game Loop ----
-let lastTime = performance.now();
-let isPaused = false;
-
 function tick() {
   requestAnimationFrame(tick);
 
-  const now = performance.now();
-  let dt = (now - lastTime) / 1000;
-  lastTime = now;
-  if (dt > 0.1) dt = 0.016;
+  let frameTime = (performance.now() - lastTime) / 1000;
+  lastTime = performance.now();
+  if (frameTime > MAX_FRAME_TIME) frameTime = MAX_FRAME_TIME;
 
   // Pause toggle
   if (input.consumeJustPressed('Escape') || input.consumeJustPressed('p')) {
@@ -377,10 +386,19 @@ function tick() {
 
   // Update based on current screen
   if (currentScreen === 'play' && !isPaused) {
-    game.update(dt, composedInput);
-    renderer.updatePlayer(game.player, composedInput.isDown('hold'));
-    effects.update(dt);
+    accumulator += frameTime;
+
+    while (accumulator >= FIXED_DT) {
+      game.update(FIXED_DT, composedInput);
+      effects.update(FIXED_DT);
+      accumulator -= FIXED_DT;
+    }
+
+    const renderAlpha = accumulator / FIXED_DT;
+    const renderSnapshot = game.getInterpolatedPlayerSnapshot(renderAlpha);
+    renderer.updatePlayer(game.player, composedInput.isDown('hold'), renderSnapshot);
   } else if (currentScreen === 'editor') {
+    accumulator = 0;
     if (input.consumeJustPressed(' ')) {
       editor.toggleMode();
     }

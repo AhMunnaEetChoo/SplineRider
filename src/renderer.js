@@ -297,14 +297,15 @@ export class Renderer {
     this.camera.position.set(midX, midY, 100);
   }
 
-  updatePlayer(player, isHolding = false) {
-    const pos = player.getPosition();
+  updatePlayer(player, isHolding = false, renderSnapshot = null) {
+    const pos = renderSnapshot ? renderSnapshot.position : player.getPosition();
+    const playerState = renderSnapshot ? renderSnapshot.state : player.getState();
     this.playerDot.position.set(pos.x, pos.y, 10);
 
     if (this.playerGlow) {
       this.playerGlow.position.set(pos.x, pos.y, 10);
-      const riding = (player.getState() === 'riding');
-      const seeking = !riding && isHolding && (player.getState() === 'freeFlight');
+      const riding = (playerState === 'riding');
+      const seeking = !riding && isHolding && (playerState === 'freeFlight');
       this.playerGlow.visible = riding || seeking;
       this.playerGlow.material.opacity = seeking ? 0.15 : 0.35;
     }
