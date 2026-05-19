@@ -102,17 +102,19 @@ export class Renderer {
       this.gameViewGroup.add(mesh);
     }
 
-    if (splines.length > 0) {
+    if (startPosition || goalPosition) {
       const startPos = startPosition
         ? new THREE.Vector2(startPosition.x, startPosition.y)
-        : splines[0].pointAt(0);
+        : (splines.length > 0 ? splines[0].pointAt(0) : new THREE.Vector2(0, 0));
       const startGeo = new THREE.CircleGeometry(10, 32);
       const startMat = new THREE.MeshBasicMaterial({ color: Colors.accent });
       this.startMarker = new THREE.Mesh(startGeo, startMat);
       this.startMarker.position.set(startPos.x, startPos.y, 10);
       this.scene.add(this.startMarker);
 
-      const endPos = goalPosition || splines[splines.length - 1].pointAt(1);
+      const endPos = goalPosition
+        ? new THREE.Vector2(goalPosition.x, goalPosition.y)
+        : (splines.length > 0 ? splines[splines.length - 1].pointAt(1) : new THREE.Vector2(0, 0));
       const goalGeo = new THREE.RingGeometry(30, 36, 32);
       const goalMat = new THREE.MeshBasicMaterial({ color: Colors.highlight, side: THREE.DoubleSide });
       this.goalMarker = new THREE.Mesh(goalGeo, goalMat);

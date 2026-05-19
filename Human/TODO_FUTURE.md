@@ -1,13 +1,9 @@
 # TODO FUTURE
 
 
-- investigate catmull node frequency and spline editing.
-- editor tooling:
-    - extend spline
-    - draw straight lines
-    - draw smoother curves
-- allow there to be 0 splines in a level
-
+- editor improvements:
+    - join splines
+    
 - magnetize spring to the spline before snapping a short distance rather than a full snap. could be visual only not sure
 
 

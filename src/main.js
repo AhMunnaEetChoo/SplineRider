@@ -402,6 +402,9 @@ function tick() {
     if (input.consumeJustPressed(' ')) {
       editor.toggleMode();
     }
+    if (input.consumeJustPressed('Escape')) {
+      editor.cancelKnotPlacement();
+    }
     editor.update();
   }
 

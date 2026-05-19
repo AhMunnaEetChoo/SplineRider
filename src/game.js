@@ -50,9 +50,13 @@ export class Game {
       levelData.goalPosition.x, levelData.goalPosition.y
     );
 
-    this.player = new Player(this.splines[0]);
+    // Handle levels with 0 splines — create a dummy spline for the Player constructor
+    const primarySpline = this.splines.length > 0
+      ? this.splines[0]
+      : new Spline([new THREE.Vector2(0, 0), new THREE.Vector2(1, 0)]);
+    this.player = new Player(primarySpline);
     this.player.state = State.FREE_FLIGHT;
-    const sp = levelData.startPosition || this.splines[0].pointAt(0);
+    const sp = levelData.startPosition || (this.splines.length > 0 ? this.splines[0].pointAt(0) : { x: 0, y: 0 });
     this.player.position.set(sp.x, sp.y);
     this.player.velocity.set(0, 0);
 
