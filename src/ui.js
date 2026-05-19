@@ -108,7 +108,7 @@ export class UIManager {
       style: `display:none; position:absolute; top:8px; left:50%; transform:translateX(-50%);`
         + ` gap:6px; z-index:5; pointer-events:all;`
     },
-      this._tbBtn('Pan', 'btn-toggle-mode'),
+      this._tbBtn('Freehand', 'btn-toggle-mode'),
       this._tbBtn('- Spline', 'btn-delete-spline'),
 
       el('div', { style: 'position:relative; display:inline-flex;' },
@@ -405,8 +405,9 @@ export class UIManager {
   }
 
   setModeLabel(mode) {
+    const labels = { freehand: 'Freehand', straight: 'Straight', knots: 'Knots', pan: 'Pan' };
     const btn = document.getElementById('btn-toggle-mode');
-    if (btn) btn.textContent = (mode === 'draw') ? 'Pan' : 'Draw';
+    if (btn) btn.textContent = labels[mode] || mode;
   }
 
   updateHUD() {

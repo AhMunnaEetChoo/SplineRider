@@ -5,7 +5,8 @@ import { Spline } from './spline.js';
 
 const HIT_RADIUS = 15;
 const CURVE_HIT_RADIUS = 12;
-const DRAW_MIN_DIST = 25;
+const DRAW_MIN_DIST = 40;
+const KNOT_LONG_PRESS_MS = 300;
 
 export class Editor {
   constructor(renderer) {
@@ -20,7 +21,10 @@ export class Editor {
     this.selectedSplineIndex = -1;
     this.dragState = null;
     this.mouseWorld = { x: 0, y: 0 };
-    this.mode = 'draw';       // 'draw' | 'pan'
+    this.mode = 'freehand';  // 'freehand' | 'straight' | 'knots' | 'pan'
+    this._knotMouseDownTime = 0;
+    this._knotMouseDownWorld = null;
+    this._knotPlacingIndex = -1;
     this._active = false;
 
     // Callbacks (set by main.js)
@@ -47,6 +51,7 @@ export class Editor {
     this.goalPosition = { x: 200, y: 0 };
     this.selectedSplineIndex = -1;
     this.dragState = null;
+    this._knotPlacingIndex = -1;
     this._rebuildView();
     this.renderer.frameCamera(this.startPosition, this.goalPosition);
   }
@@ -65,6 +70,7 @@ export class Editor {
     };
     this.selectedSplineIndex = -1;
     this.dragState = null;
+    this._knotPlacingIndex = -1;
     this._rebuildView();
     this.renderer.frameCamera(this.startPosition, this.goalPosition);
   }
@@ -104,7 +110,19 @@ export class Editor {
   }
 
   toggleMode() {
-    this.mode = (this.mode === 'draw') ? 'pan' : 'draw';
+    // Commit any in-progress knot placement before switching
+    if (this._knotPlacingIndex >= 0) {
+      const s = this.splines[this._knotPlacingIndex];
+      if (s.points.length < 2) {
+        this.splines.splice(this._knotPlacingIndex, 1);
+        this._rebuildView();
+      }
+      this._knotPlacingIndex = -1;
+      this._selectSpline(-1);
+    }
+    const modes = ['freehand', 'straight', 'knots', 'pan'];
+    const idx = modes.indexOf(this.mode);
+    this.mode = modes[(idx + 1) % modes.length];
     this.dragState = null;
     if (this.onModeChange) this.onModeChange(this.mode);
   }
@@ -115,20 +133,59 @@ export class Editor {
     const m = this.mouseWorld;
     const ds = this.dragState;
 
-    if (ds.type === 'knot') {
+    if (ds.type === 'endpointHold') {
+      const dx = m.x - ds.startX;
+      const dy = m.y - ds.startY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const elapsed = performance.now() - ds.startTime;
+
+      if (dist > 5) {
+        // Drag → extend the spline
+        if (this.mode === 'straight') {
+          const newIndex = this.splines.length;
+          const ep = this.splines[ds.splineIndex].points[ds.pointIndex];
+          this.splines.push({
+            points: [{ x: ep.x, y: ep.y }, { x: m.x, y: m.y }],
+          });
+          this._rebuildView();
+          this.dragState = { type: 'straightLine', splineIndex: newIndex, startX: m.x, startY: m.y };
+          this._selectSpline(newIndex);
+        } else {
+          this.dragState = { type: 'drawing', splineIndex: ds.splineIndex, extendFromStart: ds.pointIndex === 0 };
+        }
+      } else if (elapsed > 300) {
+        // Long press → edit knot position
+        this.dragState = { type: 'knot', splineIndex: ds.splineIndex, pointIndex: ds.pointIndex };
+        this.renderer.setEditorKnotHighlight(ds.splineIndex, ds.pointIndex);
+      }
+    } else if (ds.type === 'knot') {
       const s = this.splines[ds.splineIndex];
       s.points[ds.pointIndex].x = m.x;
       s.points[ds.pointIndex].y = m.y;
       this.renderer.updateEditorSplineGeometry(ds.splineIndex, s);
     } else if (ds.type === 'drawing') {
       const s = this.splines[ds.splineIndex];
-      const last = s.points[s.points.length - 1];
-      const dx = m.x - last.x;
-      const dy = m.y - last.y;
-      if (Math.sqrt(dx * dx + dy * dy) >= DRAW_MIN_DIST) {
-        s.points.push({ x: m.x, y: m.y });
-        this.renderer.updateEditorSplineGeometry(ds.splineIndex, s);
+      if (ds.extendFromStart) {
+        const first = s.points[0];
+        const dx = m.x - first.x;
+        const dy = m.y - first.y;
+        if (Math.sqrt(dx * dx + dy * dy) >= DRAW_MIN_DIST) {
+          s.points.unshift({ x: m.x, y: m.y });
+          this.renderer.updateEditorSplineGeometry(ds.splineIndex, s);
+        }
+      } else {
+        const last = s.points[s.points.length - 1];
+        const dx = m.x - last.x;
+        const dy = m.y - last.y;
+        if (Math.sqrt(dx * dx + dy * dy) >= DRAW_MIN_DIST) {
+          s.points.push({ x: m.x, y: m.y });
+          this.renderer.updateEditorSplineGeometry(ds.splineIndex, s);
+        }
       }
+    } else if (ds.type === 'straightLine') {
+      const s = this.splines[ds.splineIndex];
+      s.points[1] = { x: m.x, y: m.y };
+      this.renderer.updateEditorSplineGeometry(ds.splineIndex, s);
     } else if (ds.type === 'start') {
       this.startPosition.x = m.x;
       this.startPosition.y = m.y;
@@ -154,8 +211,17 @@ export class Editor {
     this._rebuildView();
   }
 
+  cancelKnotPlacement() {
+    if (this._knotPlacingIndex >= 0) {
+      this.splines.splice(this._knotPlacingIndex, 1);
+      this._knotPlacingIndex = -1;
+      this.selectedSplineIndex = -1;
+      this._notifySelectionChange();
+      this._rebuildView();
+    }
+  }
+
   deleteSelectedSpline() {
-    if (this.splines.length <= 1) return;
     if (this.selectedSplineIndex < 0) return;
 
     const removedIdx = this.selectedSplineIndex;
@@ -163,6 +229,7 @@ export class Editor {
 
     this.selectedSplineIndex = -1;
     this.dragState = null;
+    this._knotPlacingIndex = -1;
     this._notifySelectionChange();
     this._rebuildView();
   }
@@ -298,6 +365,24 @@ export class Editor {
     return Math.sqrt(dx * dx + dy * dy) < 20;
   }
 
+  _findNearEndpoint(worldX, worldY) {
+    for (let i = 0; i < this.splines.length; i++) {
+      const pts = this.splines[i].points;
+      if (pts.length < 2) continue;
+      const first = pts[0];
+      const last = pts[pts.length - 1];
+      const dFirst = Math.sqrt((worldX - first.x) ** 2 + (worldY - first.y) ** 2);
+      const dLast = Math.sqrt((worldX - last.x) ** 2 + (worldY - last.y) ** 2);
+      if (dFirst < HIT_RADIUS) {
+        return { splineIndex: i, pointIndex: 0 };
+      }
+      if (dLast < HIT_RADIUS) {
+        return { splineIndex: i, pointIndex: pts.length - 1 };
+      }
+    }
+    return null;
+  }
+
   _startDrawing(worldX, worldY) {
     const newIndex = this.splines.length;
     this.splines.push({
@@ -334,6 +419,7 @@ export class Editor {
     if (this._isNearGoal(world.x, world.y)) {
       this.dragState = { type: 'goal' };
       this._selectSpline(-1);
+      this._knotPlacingIndex = -1;
       return;
     }
 
@@ -341,27 +427,73 @@ export class Editor {
     if (this._isNearStart(world.x, world.y)) {
       this.dragState = { type: 'start' };
       this._selectSpline(-1);
+      this._knotPlacingIndex = -1;
       return;
     }
 
-    // 3. Knot point hit-test
-    const knotHit = this._findNearestKnot(world.x, world.y);
-    if (knotHit) {
-      this.dragState = { type: 'knot', splineIndex: knotHit.splineIndex, pointIndex: knotHit.pointIndex };
-      this._selectSpline(knotHit.splineIndex);
-      this.renderer.setEditorKnotHighlight(knotHit.splineIndex, knotHit.pointIndex);
+    // 3. Endpoint hit — hold to drag knot, drag to extend (freehand/straight)
+    if (this.mode === 'freehand' || this.mode === 'straight') {
+      const extendHit = this._findNearEndpoint(world.x, world.y);
+      if (extendHit) {
+        this.dragState = {
+          type: 'endpointHold',
+          splineIndex: extendHit.splineIndex,
+          pointIndex: extendHit.pointIndex,
+          startX: world.x,
+          startY: world.y,
+          startTime: performance.now(),
+        };
+        this._selectSpline(extendHit.splineIndex);
+        this._knotPlacingIndex = -1;
+        return;
+      }
+
+      // 4. Knot point hit-test
+      const knotHit = this._findNearestKnot(world.x, world.y);
+      if (knotHit) {
+        this.dragState = { type: 'knot', splineIndex: knotHit.splineIndex, pointIndex: knotHit.pointIndex };
+        this._selectSpline(knotHit.splineIndex);
+        this.renderer.setEditorKnotHighlight(knotHit.splineIndex, knotHit.pointIndex);
+        this._knotPlacingIndex = -1;
+        return;
+      }
+
+      // 5. Curve hit-test (select only, no drag)
+      const curveHit = this._findNearestCurve(world.x, world.y);
+      if (curveHit) {
+        this._selectSpline(curveHit.splineIndex);
+        this._knotPlacingIndex = -1;
+        return;
+      }
+    }
+
+    // 6. Straight line mode — start a new line (extend was already handled above)
+    if (this.mode === 'straight') {
+      const newIndex = this.splines.length;
+      this.splines.push({
+        points: [{ x: world.x, y: world.y }, { x: world.x, y: world.y }],
+      });
+      this._rebuildView();
+      this.dragState = { type: 'straightLine', splineIndex: newIndex, startX: world.x, startY: world.y };
+      this._selectSpline(newIndex);
+      this._knotPlacingIndex = -1;
       return;
     }
 
-    // 4. Curve hit-test (select only, no drag)
-    const curveHit = this._findNearestCurve(world.x, world.y);
-    if (curveHit) {
-      this._selectSpline(curveHit.splineIndex);
+    // 7. Knots mode — record press, act on release
+    if (this.mode === 'knots') {
+      this._knotMouseDownTime = performance.now();
+      this._knotMouseDownWorld = { x: world.x, y: world.y };
+      this.dragState = null;
       return;
     }
 
-    // 5. Nothing hit — start drawing a new spline
-    this._startDrawing(world.x, world.y);
+    // 8. Freehand mode — start drawing (extend was already handled above)
+    if (this.mode === 'freehand') {
+      this._startDrawing(world.x, world.y);
+      this._knotPlacingIndex = -1;
+      return;
+    }
   }
 
   _onMouseMove(e) {
@@ -402,14 +534,47 @@ export class Editor {
       return;
     }
 
-    // If drawing and only 1 point placed, remove the spline
-    if (ds && ds.type === 'drawing') {
+    // Straight line — keep even if very short (user can delete)
+    if (ds && ds.type === 'straightLine') {
       const s = this.splines[ds.splineIndex];
-      if (s.points.length < 2) {
+      const dx = s.points[1].x - s.points[0].x;
+      const dy = s.points[1].y - s.points[0].y;
+      if (Math.sqrt(dx * dx + dy * dy) < 5) {
         this.splines.splice(ds.splineIndex, 1);
         this.selectedSplineIndex = -1;
         this._notifySelectionChange();
         this._rebuildView();
+      }
+    }
+
+    // Knots mode: long press to finish, normal click to place point
+    if (this.mode === 'knots' && this._knotMouseDownWorld && !ds) {
+      const duration = performance.now() - this._knotMouseDownTime;
+      const w = this._knotMouseDownWorld;
+
+      if (this._knotPlacingIndex >= 0 && duration >= KNOT_LONG_PRESS_MS) {
+        // Long press: finish the spline
+        const s = this.splines[this._knotPlacingIndex];
+        if (s.points.length < 2) {
+          this.splines.splice(this._knotPlacingIndex, 1);
+          this._rebuildView();
+        }
+        this._knotPlacingIndex = -1;
+        this._selectSpline(-1);
+      } else if (this._knotPlacingIndex >= 0) {
+        // Normal click: add point to current spline
+        const s = this.splines[this._knotPlacingIndex];
+        s.points.push({ x: w.x, y: w.y });
+        this.renderer.updateEditorSplineGeometry(this._knotPlacingIndex, s);
+      } else {
+        // Start new spline
+        const newIndex = this.splines.length;
+        this.splines.push({
+          points: [{ x: w.x, y: w.y }],
+        });
+        this._rebuildView();
+        this._knotPlacingIndex = newIndex;
+        this._selectSpline(newIndex);
       }
     }
 
