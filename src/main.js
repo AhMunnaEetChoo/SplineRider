@@ -139,6 +139,7 @@ game.onStateChange = (newState) => {
   const pos = game.player.getPosition();
   if (newState === State.FREE_FLIGHT && _prevPlayerState === State.RIDING) {
     effects.emitLaunch(pos);
+    renderer.spawnSettlingSpring(game.player.lastSpring);
   } else if (newState === State.RIDING && _prevPlayerState === State.FREE_FLIGHT) {
     effects.emitAttach(pos);
   }
@@ -387,6 +388,7 @@ function tick() {
     while (accumulator >= FIXED_DT) {
       game.update(FIXED_DT, composedInput);
       effects.update(FIXED_DT);
+      renderer.updateVisualSprings(FIXED_DT);
       accumulator -= FIXED_DT;
     }
 

@@ -1,6 +1,43 @@
 import * as THREE from 'three';
 import { Spline } from './spline.js';
 import { Colors } from './colors.js';
+import { SPRING_K, SPRING_C } from './player.js';
+
+// Game-view spline ribbon. Static geometry; thickness (uHalfWidth) and the
+// connection bumps are applied here per-frame via uniforms — no geometry rebuilds.
+// Up to MAX_BUMPS gaussian bumps are summed so several springs (the live ridden
+// one plus detached ones still settling) can deform the same ribbon at once.
+// Future electric gradient hooks into the fragment stage (aLong / vAcross ready).
+const MAX_BUMPS = 4;
+const RIBBON_VERT = `
+  attribute vec2 aNormal;
+  attribute float aAcross;
+  attribute float aLong;
+  uniform float uHalfWidth;
+  uniform vec2 uOffset[${MAX_BUMPS}];
+  uniform float uAttachLong[${MAX_BUMPS}];
+  uniform float uFalloff;
+  varying float vAcross;
+  void main() {
+    vec2 disp = vec2(0.0);
+    for (int i = 0; i < ${MAX_BUMPS}; i++) {
+      float d = (aLong - uAttachLong[i]) / uFalloff;
+      disp += uOffset[i] * exp(-d * d);
+    }
+    vec2 center = position.xy + disp;
+    vec2 p = center + aNormal * (uHalfWidth * aAcross);
+    vAcross = aAcross;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 0.0, 1.0);
+  }
+`;
+const RIBBON_FRAG = `
+  uniform vec3 uColor;
+  varying float vAcross;
+  void main() {
+    float shade = 1.0 - 0.12 * vAcross * vAcross;  // subtle rounded shading
+    gl_FragColor = vec4(uColor * shade, 1.0);
+  }
+`;
 
 export class Renderer {
   constructor() {
@@ -34,6 +71,8 @@ export class Renderer {
     // View groups — only one visible at a time
     this.gameViewGroup = new THREE.Group();
     this.editorViewGroup = new THREE.Group();
+    this._gameRibbons = [];  // [{ spline, mesh, material }] for connection-bump uniforms
+    this._settlingSprings = [];  // detached visual springs still wobbling after launch
 
     // Player dot (always in scene)
     const dotGeo = new THREE.CircleGeometry(12, 32);
@@ -92,14 +131,70 @@ export class Renderer {
       this.scene.remove(this.goalMarker);
       this.goalMarker = null;
     }
+    this._gameRibbons = [];
+  }
+
+  _makeRibbonMaterial() {
+    const uOffset = [];
+    const uAttachLong = [];
+    for (let i = 0; i < MAX_BUMPS; i++) {
+      uOffset.push(new THREE.Vector2(0, 0));
+      uAttachLong.push(0);
+    }
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        // Brightened from Colors.accent for playtest visibility (tune here).
+        uColor: { value: new THREE.Color(Colors.brighten(Colors.accent, 0.35)) },
+        uHalfWidth: { value: 5 },
+        uOffset: { value: uOffset },
+        uAttachLong: { value: uAttachLong },
+        uFalloff: { value: 90 },
+      },
+      vertexShader: RIBBON_VERT,
+      fragmentShader: RIBBON_FRAG,
+      side: THREE.DoubleSide,
+    });
+  }
+
+  // ---- Visual springs (detached, settling after launch) ----
+
+  spawnSettlingSpring(spring) {
+    if (!spring) return;
+    if (Math.abs(spring.dispN) < 0.4 && Math.abs(spring.velN) < 2) return;  // already flat
+    this._settlingSprings.push({
+      spline: spring.spline,
+      attachLong: spring.attachLong,   // frozen at the launch point
+      axis: spring.axis.clone(),
+      dispN: spring.dispN,
+      velN: spring.velN,
+    });
+    if (this._settlingSprings.length > 16) this._settlingSprings.shift();
+  }
+
+  // Advance detached springs (same decay law as the player's spring) and cull
+  // settled ones. Called from the fixed-step loop.
+  updateVisualSprings(dt) {
+    for (let i = this._settlingSprings.length - 1; i >= 0; i--) {
+      const s = this._settlingSprings[i];
+      const accel = -SPRING_K * s.dispN - SPRING_C * s.velN;
+      s.velN += accel * dt;
+      s.dispN += s.velN * dt;
+      if (Math.abs(s.dispN) < 0.4 && Math.abs(s.velN) < 2) {
+        this._settlingSprings.splice(i, 1);
+      }
+    }
   }
 
   _buildGameView(splines, goalPosition, startPosition) {
-    const mat = new THREE.MeshBasicMaterial({ color: Colors.accent });
+    this._gameRibbons = [];
+    this._settlingSprings = [];
     for (const spline of splines) {
-      const geo = spline.createTubeGeometry();
-      const mesh = new THREE.Mesh(geo, mat);
+      const geo = spline.createRibbonGeometry();
+      const material = this._makeRibbonMaterial();
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.frustumCulled = false;
       this.gameViewGroup.add(mesh);
+      this._gameRibbons.push({ spline, mesh, material });
     }
 
     if (startPosition || goalPosition) {
@@ -316,6 +411,39 @@ export class Renderer {
       new THREE.Vector3(pos.x, pos.y, 100),
       0.3
     );
+
+    // Connection bumps: each ribbon sums its detached settling springs plus the
+    // live ridden spring (if any). Up to MAX_BUMPS, largest amplitude first.
+    if (this._gameRibbons.length > 0) {
+      const liveOffset = renderSnapshot ? renderSnapshot.offset : null;
+      const liveSpline = renderSnapshot ? renderSnapshot.spline : null;
+      const liveActive = liveOffset && liveSpline && (liveOffset.x !== 0 || liveOffset.y !== 0);
+      const liveLong = liveActive ? liveSpline.arcLengthAt(renderSnapshot.t) : 0;
+
+      for (const r of this._gameRibbons) {
+        const bumps = [];
+        for (const s of this._settlingSprings) {
+          if (s.spline !== r.spline) continue;
+          bumps.push({ ox: s.axis.x * s.dispN, oy: s.axis.y * s.dispN, long: s.attachLong, mag: Math.abs(s.dispN) });
+        }
+        if (liveActive && liveSpline === r.spline) {
+          bumps.push({ ox: liveOffset.x, oy: liveOffset.y, long: liveLong, mag: Math.hypot(liveOffset.x, liveOffset.y) });
+        }
+        bumps.sort((a, b) => b.mag - a.mag);
+
+        const uOff = r.material.uniforms.uOffset.value;
+        const uLong = r.material.uniforms.uAttachLong.value;
+        for (let i = 0; i < MAX_BUMPS; i++) {
+          if (i < bumps.length) {
+            uOff[i].set(bumps[i].ox, bumps[i].oy);
+            uLong[i] = bumps[i].long;
+          } else {
+            uOff[i].set(0, 0);
+            uLong[i] = 0;
+          }
+        }
+      }
+    }
   }
 
   render() {

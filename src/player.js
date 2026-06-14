@@ -22,8 +22,10 @@ const SNAP_RADIUS = 40;      // max distance to snap onto a spline
 const SPRING_FREQ = 1.0;     // Hz — lower = bigger, slower boings
 const SPRING_DAMPING = 0.1;  // damping ratio ζ (0 = lossless, 1 = critical)
 const _SPRING_OMEGA = 2 * Math.PI * SPRING_FREQ;
-const SPRING_K = _SPRING_OMEGA * _SPRING_OMEGA;     // stiffness (ω²)
-const SPRING_C = 2 * SPRING_DAMPING * _SPRING_OMEGA; // damping (2ζω)
+// Exported so the renderer can continue the same spring as a detached visual
+// settle animation after launch (gameplay vs visuals share one decay law).
+export const SPRING_K = _SPRING_OMEGA * _SPRING_OMEGA;     // stiffness (ω²)
+export const SPRING_C = 2 * SPRING_DAMPING * _SPRING_OMEGA; // damping (2ζω)
 
 export class Player {
   constructor(spline) {
@@ -42,6 +44,10 @@ export class Player {
     this.springAxis = new THREE.Vector2(0, 1);
     this.dispN = 0;                 // displacement along springAxis
     this.velN = 0;                  // velocity along springAxis
+
+    // Snapshot of the spring at the moment of the last launch, for the renderer's
+    // detached visual settle animation. { spline, attachLong, axis, dispN, velN }.
+    this.lastSpring = null;
   }
 
   getState() {
@@ -69,6 +75,8 @@ export class Player {
       position: this.getPosition(),
       state: this.state,
       spline: this.spline,
+      t: this.t,
+      offset: this.springAxis.clone().multiplyScalar(this.dispN),
     };
   }
 
@@ -90,6 +98,16 @@ export class Player {
     this.position = foot.add(this.springAxis.clone().multiplyScalar(this.dispN));
     this.velocity.copy(dir.multiplyScalar(this.speed))
       .add(this.springAxis.clone().multiplyScalar(this.velN));
+
+    // Hand the spring off to the renderer so the cable keeps wobbling at the
+    // (now frozen) launch point until it settles, instead of snapping flat.
+    this.lastSpring = {
+      spline: this.spline,
+      attachLong: this.spline.arcLengthAt(Math.max(0, Math.min(1, this.t))),
+      axis: this.springAxis.clone(),
+      dispN: this.dispN,
+      velN: this.velN,
+    };
 
     this.speed = 0;
     this.dispN = 0;

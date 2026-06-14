@@ -39,6 +39,8 @@ export class Game {
       position: snapshot.position.clone(),
       state: snapshot.state,
       spline: snapshot.spline,
+      t: snapshot.t,
+      offset: snapshot.offset.clone(),
     };
   }
 
@@ -80,11 +82,24 @@ export class Game {
       return this._clonePlayerSnapshot(current);
     }
 
-    const clampedAlpha = Math.max(0, Math.min(1, alpha));
+    const a = Math.max(0, Math.min(1, alpha));
+
+    // While riding, interpolate the decomposed state (foot t + spring offset) and
+    // rebuild position from it, so the ball and the ribbon connection-bump (which
+    // both read t/offset) stay in exact lockstep.
+    if (current.state === State.RIDING) {
+      const t = previous.t + (current.t - previous.t) * a;
+      const offset = previous.offset.clone().lerp(current.offset, a);
+      const position = current.spline.pointAt(Math.max(0, Math.min(1, t))).add(offset);
+      return { position, state: current.state, spline: current.spline, t, offset };
+    }
+
     return {
-      position: previous.position.clone().lerp(current.position, clampedAlpha),
+      position: previous.position.clone().lerp(current.position, a),
       state: current.state,
       spline: current.spline,
+      t: current.t,
+      offset: current.offset.clone(),
     };
   }
 

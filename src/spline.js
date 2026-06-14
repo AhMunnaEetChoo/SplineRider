@@ -82,6 +82,53 @@ export class Spline {
     return new THREE.TubeGeometry(curve, tubularSegments, radius, TUBE_RADIAL_SEGMENTS, false);
   }
 
+  // Flat 2D ribbon for the game view. Static geometry — thickness and the
+  // connection-bump deformation are applied in the vertex shader via uniforms.
+  // Per-vertex: position = rest centerline, aNormal = unit normal, aAcross = ±1
+  // (which edge), aLong = arc length from start (drives the bump falloff/gradient).
+  createRibbonGeometry() {
+    const samples = this.numSegments * SUB_PER_SEGMENT;
+    const positions = [];
+    const normals = [];
+    const across = [];
+    const longs = [];
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const c = this.pointAt(t);
+      const tan = this.tangentAt(t);
+      const len = tan.length();
+      const nx = len > 1e-6 ? -tan.y / len : 0;
+      const ny = len > 1e-6 ? tan.x / len : 1;
+      const s = this.arcLengthAt(t);
+      positions.push(c.x, c.y, 0, c.x, c.y, 0);
+      normals.push(nx, ny, nx, ny);
+      across.push(-1, 1);
+      longs.push(s, s);
+    }
+    const index = [];
+    for (let i = 0; i < samples; i++) {
+      const a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3;
+      index.push(a, b, c, b, d, c);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('aNormal', new THREE.Float32BufferAttribute(normals, 2));
+    geo.setAttribute('aAcross', new THREE.Float32BufferAttribute(across, 1));
+    geo.setAttribute('aLong', new THREE.Float32BufferAttribute(longs, 1));
+    geo.setIndex(index);
+    return geo;
+  }
+
+  // Arc length from the start of the spline to parameter t (interpolated table).
+  arcLengthAt(t) {
+    const ct = Math.max(0, Math.min(1, t));
+    const table = this._arcTable;
+    const idx = ct * (table.length - 1);
+    const i = Math.min(Math.floor(idx), table.length - 2);
+    const frac = idx - i;
+    return table[i].s + (table[i + 1].s - table[i].s) * frac;
+  }
+
   _buildArcLengthTable(samples) {
     this._arcTable = [{ t: 0, s: 0 }];
     let prev = this.pointAt(0);
