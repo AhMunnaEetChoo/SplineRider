@@ -14,6 +14,7 @@ const AIR_DRAG = 0.15;       // drag coefficient in free flight
 const ACCELERATION = 400;    // accel along spline (px/s²)
 const WORLD_BOTTOM = -600;   // below this = death
 const SNAP_RADIUS = 40;      // max distance to snap onto a spline
+const LAUNCH_T_GAP = 0.3;    // after launch, ignore re-attach within this t of the launch end
 
 // Springyness: a 1-DOF damped oscillator along a FIXED world-space axis captured
 // at attach (the lateral, non-tangential velocity direction). The axis stays put
@@ -52,6 +53,10 @@ export class Player {
     // Y below which the player dies. Defaults to WORLD_BOTTOM; Game overrides it
     // per level (just below the lowest point the level reaches).
     this.killY = WORLD_BOTTOM;
+
+    // After a launch, blocks re-attaching to the launched end of the launch spline
+    // until the player separates from it. { spline, t, point }. See _updateFreeFlight.
+    this._launchGuard = null;
   }
 
   getState() {
@@ -111,6 +116,15 @@ export class Player {
       axis: this.springAxis.clone(),
       dispN: this.dispN,
       velN: this.velN,
+    };
+
+    // Guard against the spring immediately yanking us back onto the spline we just
+    // left: ignore re-attaches near this t until we separate (see _updateFreeFlight).
+    const launchT = Math.max(0, Math.min(1, this.t));
+    this._launchGuard = {
+      spline: this.spline,
+      t: launchT,
+      point: this.spline.pointAt(launchT),
     };
 
     this.speed = 0;
@@ -247,6 +261,11 @@ export class Player {
   }
 
   _updateFreeFlight(dt, input, splines) {
+    // Clear the launch guard once we've physically separated from the launch point.
+    if (this._launchGuard && this.position.distanceTo(this._launchGuard.point) > SNAP_RADIUS) {
+      this._launchGuard = null;
+    }
+
     this._wantsAttach = input.isDown('hold');
 
     if (this._wantsAttach) {
@@ -255,7 +274,12 @@ export class Player {
       let bestDist = Infinity;
 
       for (const spline of splines) {
-        const result = spline.findClosestPointOnSpline(this.position, 128);
+        // On the just-launched spline, exclude the launched-end neighbourhood so the
+        // spring can't yank us straight back (but the far end of a loop still attaches).
+        const guarded = this._launchGuard && this._launchGuard.spline === spline;
+        const result = guarded
+          ? spline.findClosestPointOnSpline(this.position, 128, this._launchGuard.t, LAUNCH_T_GAP)
+          : spline.findClosestPointOnSpline(this.position, 128);
         if (result.distance < bestDist) {
           // Only snap to points ahead of our velocity direction
           const velLen = this.velocity.length();
@@ -273,6 +297,7 @@ export class Player {
         this.spline = bestSpline;
         this.t = bestT;
         this.state = State.RIDING;
+        this._launchGuard = null;
         const tangent = bestSpline.tangentAt(bestT);
         const tlen = tangent.length();
         if (tlen > 0.0001) {

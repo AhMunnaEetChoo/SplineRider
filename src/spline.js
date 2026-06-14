@@ -48,12 +48,16 @@ export class Spline {
     return _catmullRomTangent(prev, curr, next, next2, localT);
   }
 
-  findClosestPointOnSpline(worldPos, samples = 128) {
+  // Optional exclusion window: when excludeCenterT is provided, samples whose t
+  // is within excludeHalfWidth of it are skipped (used to ignore the launch end
+  // when checking for re-attachment).
+  findClosestPointOnSpline(worldPos, samples = 128, excludeCenterT = null, excludeHalfWidth = 0) {
     let bestT = 0;
     let bestDist = Infinity;
     let bestPoint = new THREE.Vector2();
     for (let i = 0; i <= samples; i++) {
       const t = i / samples;
+      if (excludeCenterT !== null && Math.abs(t - excludeCenterT) < excludeHalfWidth) continue;
       const pt = this.pointAt(t);
       const dist = worldPos.distanceToSquared(pt);
       if (dist < bestDist) {
