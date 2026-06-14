@@ -18,6 +18,10 @@ Then open `http://localhost:8080`. Three.js is loaded at runtime via import map 
 
 There are no tests, no linter, no bundler.
 
+## Creator / Claude explicit split
+
+Do not modify the contents of `Human` - this is where author intent lives. Use the `Documentation` folder are create others for plans, ideation and docs.
+
 ## Architecture
 
 ```

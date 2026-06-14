@@ -4,10 +4,8 @@ A 2D side-view browser game where a particle rides cubic Bezier splines. Acceler
 
 ## How to Play
 
-**Keyboard controls:**
-- **Right arrow / D** — accelerate forward along the spline
-- **Left arrow / A** — accelerate backward along the spline
-- **Both left + right** — launch off the spline into free flight
+**Mouse and Keyboard controls:**
+- **Left Click** - hold to ride splines
 - **R** — reset from last checkpoint
 - **Escape / P** — pause
 
