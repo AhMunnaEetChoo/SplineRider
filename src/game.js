@@ -135,6 +135,8 @@ export class Game {
     if (this.player.state !== State.DEAD && this.player.state !== State.WIN) {
       const dist = this.player.getPosition().distanceTo(this.goalPosition);
       if (dist < WIN_RADIUS) {
+        // Freeze at the win point (spring offset included) before leaving RIDING
+        this.player.position.copy(this.player.getPosition());
         this.player.state = State.WIN;
         this._currentPlayerSnapshot = this.player.getRenderSnapshot();
         if (this.onWin) this.onWin(this.elapsedTime);

@@ -15,6 +15,16 @@ const ACCELERATION = 400;    // accel along spline (px/s²)
 const WORLD_BOTTOM = -600;   // below this = death
 const SNAP_RADIUS = 40;      // max distance to snap onto a spline
 
+// Springyness: a 1-DOF damped oscillator along a FIXED world-space axis captured
+// at attach (the lateral, non-tangential velocity direction). The axis stays put
+// for the whole attachment, so a curving spline doesn't twist the spring feel.
+// Express tuning as frequency + damping ratio.
+const SPRING_FREQ = 1.0;     // Hz — lower = bigger, slower boings
+const SPRING_DAMPING = 0.1;  // damping ratio ζ (0 = lossless, 1 = critical)
+const _SPRING_OMEGA = 2 * Math.PI * SPRING_FREQ;
+const SPRING_K = _SPRING_OMEGA * _SPRING_OMEGA;     // stiffness (ω²)
+const SPRING_C = 2 * SPRING_DAMPING * _SPRING_OMEGA; // damping (2ζω)
+
 export class Player {
   constructor(spline) {
     this.spline = spline;
@@ -26,6 +36,12 @@ export class Player {
     this.position = new THREE.Vector2();
     this.velocity = new THREE.Vector2();
     this.rideDirection = 1;         // 1 = forward, -1 = backward along spline
+
+    // Spring state, only meaningful while RIDING. Oscillates along springAxis,
+    // a fixed world-space unit vector captured at attach time.
+    this.springAxis = new THREE.Vector2(0, 1);
+    this.dispN = 0;                 // displacement along springAxis
+    this.velN = 0;                  // velocity along springAxis
   }
 
   getState() {
@@ -38,7 +54,12 @@ export class Player {
 
   getPosition() {
     if (this.state === State.RIDING) {
-      return this.spline.pointAt(Math.max(0, Math.min(1, this.t)));
+      const ct = Math.max(0, Math.min(1, this.t));
+      const foot = this.spline.pointAt(ct);
+      if (this.dispN !== 0) {
+        foot.add(this.springAxis.clone().multiplyScalar(this.dispN));
+      }
+      return foot;
     }
     return this.position.clone();
   }
@@ -58,11 +79,28 @@ export class Player {
 
   launch(splineTangent) {
     this.state = State.FREE_FLIGHT;
-    this.position = this.spline.pointAt(Math.max(0, Math.min(1, this.t)));
     const tlen = splineTangent.length();
     const dir = tlen > 0.0001 ? splineTangent.clone().divideScalar(tlen) : new THREE.Vector2(1, 0);
-    this.velocity.copy(dir.multiplyScalar(this.speed));
+
+    // Launch from where the dot visibly is (foot + spring offset), and fold the
+    // spring's velocity (along the fixed springAxis) into the exit velocity. With
+    // damping this can never exceed the inflow, so timing a release to the first
+    // return kicks you back.
+    const foot = this.spline.pointAt(Math.max(0, Math.min(1, this.t)));
+    this.position = foot.add(this.springAxis.clone().multiplyScalar(this.dispN));
+    this.velocity.copy(dir.multiplyScalar(this.speed))
+      .add(this.springAxis.clone().multiplyScalar(this.velN));
+
     this.speed = 0;
+    this.dispN = 0;
+    this.velN = 0;
+  }
+
+  _updateSpring(dt) {
+    // Semi-implicit (symplectic) Euler: update velocity before position.
+    const accel = -SPRING_K * this.dispN - SPRING_C * this.velN;
+    this.velN += accel * dt;
+    this.dispN += this.velN * dt;
   }
 
   update(deltaTime, input, splines) {
@@ -78,6 +116,8 @@ export class Player {
     }
 
     if (this.isOffBottom()) {
+      // Freeze at the death point (spring offset included) before leaving RIDING
+      this.position.copy(this.getPosition());
       this.state = State.DEAD;
     }
   }
@@ -90,6 +130,9 @@ export class Player {
       this.launch(tangent);
       return;
     }
+
+    // Spring (normal axis) — independent of tangential motion
+    this._updateSpring(dt);
 
     // Auto-accelerate in the locked direction
     this.speed += ACCELERATION * this.rideDirection * dt;
@@ -159,6 +202,8 @@ export class Player {
   }
 
   _transferToSpline(result) {
+    // springAxis is world-fixed, so the spring (dispN/velN/springAxis) just
+    // carries across the seam unchanged.
     this.spline = result.spline;
     this.t = result.t;
   }
@@ -213,9 +258,18 @@ export class Player {
           const dot = this.velocity.dot(tangentDir);
           this.speed = dot;
           this.rideDirection = dot >= 0 ? 1 : -1;
+          // Cleanly split the inflow: the tangential component is rail-aligned travel
+          // (speed), the perpendicular component is the spring. Freeze the spring axis
+          // to the rail normal at attach so it stays fixed for the whole attachment.
+          this.springAxis.set(-tangentDir.y, tangentDir.x);
+          this.velN = this.velocity.dot(this.springAxis);
+          this.dispN = 0;
         } else {
           this.speed = this.velocity.length();
           this.rideDirection = 1;
+          this.springAxis.set(0, 1);
+          this.velN = 0;
+          this.dispN = 0;
         }
         return;
       }
