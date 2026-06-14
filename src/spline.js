@@ -74,6 +74,16 @@ export class Spline {
     return pts;
   }
 
+  // Lowest y the curve actually reaches (sampled — Catmull-Rom can dip below
+  // its through-points between knots).
+  lowestY() {
+    let min = Infinity;
+    for (const p of this.samplePoints()) {
+      if (p.y < min) min = p.y;
+    }
+    return min;
+  }
+
   createTubeGeometry(radius = TUBE_RADIUS) {
     const tubularSegments = this.numSegments * SUB_PER_SEGMENT;
     const sampled = this.samplePoints(tubularSegments);

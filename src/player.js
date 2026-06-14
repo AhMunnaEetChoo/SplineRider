@@ -48,6 +48,10 @@ export class Player {
     // Snapshot of the spring at the moment of the last launch, for the renderer's
     // detached visual settle animation. { spline, attachLong, axis, dispN, velN }.
     this.lastSpring = null;
+
+    // Y below which the player dies. Defaults to WORLD_BOTTOM; Game overrides it
+    // per level (just below the lowest point the level reaches).
+    this.killY = WORLD_BOTTOM;
   }
 
   getState() {
@@ -82,7 +86,7 @@ export class Player {
 
   isOffBottom() {
     const pos = this.getPosition();
-    return pos.y < WORLD_BOTTOM;
+    return pos.y < this.killY;
   }
 
   launch(splineTangent) {

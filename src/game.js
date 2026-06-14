@@ -4,6 +4,7 @@ import { Player, State } from './player.js';
 import { DEFAULT_LEVEL } from './levels.js';
 
 const WIN_RADIUS = 40;
+const KILL_LINE_DELTA = 300;  // kill line sits this far below the level's lowest point
 
 function _deserializeSplines(splineDataArray) {
   return splineDataArray.map(s => new Spline(
@@ -60,6 +61,15 @@ export class Game {
     const sp = levelData.startPosition || (this.splines.length > 0 ? this.splines[0].pointAt(0) : { x: 0, y: 0 });
     this.player.position.set(sp.x, sp.y);
     this.player.velocity.set(0, 0);
+
+    // Kill line: a bit below the lowest point the level reaches. Computed from the
+    // splines (also clamped below start/goal so neither can sit under the line).
+    // Recomputed per level here, so editor test-play gets the right line too.
+    let lowest = Math.min(sp.y, this.goalPosition.y);
+    for (const s of this.splines) {
+      lowest = Math.min(lowest, s.lowestY());
+    }
+    this.player.killY = lowest - KILL_LINE_DELTA;
 
     this.elapsedTime = 0;
     this._lastState = this.player.state;
