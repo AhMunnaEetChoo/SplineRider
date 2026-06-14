@@ -1,27 +1,36 @@
 # Spline Rider
 
-A 2D side-view browser game where a particle rides cubic Bezier splines. Accelerate along curves, launch between them, and reach the goal as fast as you can. Built with hand-rolled physics and Three.js for rendering — no game engine.
+A 2D side-view browser game where a particle rides Catmull-Rom splines. Hold to ride along a curve, release to launch into free flight, and reach the goal as fast as you can. Built with hand-rolled physics and Three.js for rendering — no game engine.
 
 ## How to Play
 
-**Mouse and Keyboard controls:**
-- **Left Click** - hold to ride splines
-- **R** — reset from last checkpoint
+The only control is **hold**. Hold to ride forward along the spline you're on; release to launch off it along its tangent. While airborne, gravity pulls you down — keep holding and you'll re-attach to the nearest spline within range. Reach the goal ring to win.
+
+**Mouse and keyboard:**
+- **Hold Space / Left Click** — ride the current spline; release to launch
+- **R** — restart the level
 - **Escape / P** — pause
 
-**Touch controls (mobile):**
-On-screen buttons appear at the bottom of the screen — left, right, and launch (center).
+**Touch (mobile):**
+- **Hold anywhere** on screen to ride; release to launch
+- Pause and restart buttons appear in the top-right during play
 
-When airborne, left/right gives weak horizontal air control. Gravity pulls you down. You re-attach to any spline your trajectory intersects.
+There is no left/right steering — momentum, gravity, and where you launch from are the whole game.
 
 ## Level Editor
 
-Spline Rider includes a built-in click-and-drag level editor:
+Spline Rider includes a built-in click-and-drag level editor. The toolbar mode button cycles through four modes:
 
-- **Click and drag** control points to shape Bezier curves
-- **Click and drag** the start marker (green triangle) or goal marker (yellow ring)
-- **Add Spline / Delete Spline** buttons to manage splines
-- **Save** levels to browser storage, **Load** them back
+- **Freehand** — draw a spline by dragging; drag from an endpoint to extend it, long-press a knot to drag it
+- **Straight** — drag to lay down straight two-point segments
+- **Knots** — click to drop knot points one at a time; long-press to finish the spline
+- **Pan** — drag to move the camera
+
+Plus:
+
+- **Click and drag** the start marker or goal marker to reposition them
+- **- Spline** deletes the selected spline
+- **Save** levels to browser storage, **Load** them back (via the **☰ More** menu)
 - **Export** copies level JSON to clipboard, **Import** loads from JSON
 - **Test** play your level directly, returning to the editor on win/death
 

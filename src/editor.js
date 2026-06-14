@@ -199,18 +199,6 @@ export class Editor {
 
   // ---- Spline management ----
 
-  addSpline() {
-    const mx = this.mouseWorld.x || 0;
-    const my = this.mouseWorld.y || 0;
-    this.splines.push({
-      points: [
-        { x: mx - 100, y: my },
-        { x: mx + 100, y: my },
-      ],
-    });
-    this._rebuildView();
-  }
-
   cancelKnotPlacement() {
     if (this._knotPlacingIndex >= 0) {
       this.splines.splice(this._knotPlacingIndex, 1);
@@ -321,32 +309,6 @@ export class Editor {
         if (dist < bestDist) {
           bestDist = dist;
           best = { splineIndex: i, distance: dist };
-        }
-      }
-    }
-    return best;
-  }
-
-  _snapToNearestSpline(worldX, worldY) {
-    let best = null;
-    let bestDist = 30;
-
-    for (let i = 0; i < this.splines.length; i++) {
-      const s = this.splines[i];
-      if (s.points.length < 2) continue;
-      const spline = new Spline(
-        s.points.map(p => new THREE.Vector2(p.x, p.y))
-      );
-      const samples = 32;
-      for (let j = 0; j <= samples; j++) {
-        const t = j / samples;
-        const pt = spline.pointAt(t);
-        const dx = worldX - pt.x;
-        const dy = worldY - pt.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = { splineIndex: i, t, position: { x: pt.x, y: pt.y } };
         }
       }
     }

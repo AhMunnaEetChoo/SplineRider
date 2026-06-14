@@ -10,12 +10,12 @@ export class Effects {
     this.scene = scene;
     this.particles = [];
 
-    // Create circle texture
+    // Create circle texture (white — particle colour comes from per-vertex colours)
     const canvas = document.createElement('canvas');
     canvas.width = 16;
     canvas.height = 16;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = Colors.text;
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(8, 8, 6, 0, Math.PI * 2);
     ctx.fill();
@@ -23,15 +23,16 @@ export class Effects {
 
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(MAX_PARTICLES * 3);
+    const colors = new Float32Array(MAX_PARTICLES * 3);
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const mat = new THREE.PointsMaterial({
       map: texture,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       transparent: true,
-      opacity: 0.8,
-      color: Colors.text,
+      vertexColors: true,
     });
 
     this.points = new THREE.Points(geo, mat);
@@ -83,18 +84,15 @@ export class Effects {
     });
   }
 
-  update(dt, playerState) {
+  update(dt) {
     const posArr = this.points.geometry.attributes.position.array;
+    const colArr = this.points.geometry.attributes.color.array;
 
     for (let i = 0; i < this.particles.length; i++) {
       const p = this.particles[i];
       p.life -= dt;
 
       if (p.life <= 0) {
-        // Return to pool
-        posArr[i * 3] = 0;
-        posArr[i * 3 + 1] = -9999;
-        posArr[i * 3 + 2] = 0;
         this.particles.splice(i, 1);
         i--;
         continue;
@@ -108,12 +106,22 @@ export class Effects {
       posArr[i * 3 + 1] = p.position.y;
       posArr[i * 3 + 2] = 0.03;
 
-      // Fade based on life
+      // Per-particle fade: scale colour toward black (additive blending fades it out)
       const alpha = p.life / p.maxLife;
-      this.points.material.opacity = 0.6 * alpha;
+      colArr[i * 3] = p.color.r * alpha;
+      colArr[i * 3 + 1] = p.color.g * alpha;
+      colArr[i * 3 + 2] = p.color.b * alpha;
+    }
+
+    // Clear trailing pool slots so freed particles don't linger as ghosts
+    for (let i = this.particles.length; i < MAX_PARTICLES; i++) {
+      colArr[i * 3] = 0;
+      colArr[i * 3 + 1] = 0;
+      colArr[i * 3 + 2] = 0;
     }
 
     this.points.geometry.attributes.position.needsUpdate = true;
+    this.points.geometry.attributes.color.needsUpdate = true;
   }
 
   _allocParticle() {

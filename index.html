@@ -33,7 +33,6 @@
     <div id="speed">Speed: 0.0</div>
     <div id="state">State: idle</div>
   </div>
-  <div id="win-message" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:var(--color-highlight); font-family:monospace; font-size:48px; pointer-events:none; text-shadow:0 0 20px var(--color-highlight);">You Win!</div>
   <script>
     window.addEventListener('error', function(e) {
       if (e.target.tagName === 'SCRIPT' && e.target.src && e.target.src.includes('unpkg.com')) {

@@ -125,10 +125,6 @@ game.onDeath = () => {
   }
 };
 
-game.onReset = () => {
-  document.getElementById('win-message').style.display = 'none';
-};
-
 game.onPhaseChange = (phase) => {
   if (phase === 'ready') {
     ui.showOverlay('ready');

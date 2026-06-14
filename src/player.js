@@ -226,15 +226,4 @@ export class Player {
     this.position.copy(result.position);
     this.velocity.copy(result.velocity);
   }
-
-  reset(spline) {
-    this.spline = spline;
-    this.t = 0;
-    this.speed = 0;
-    this.state = State.RIDING;
-    this.position.set(0, 0);
-    this.velocity.set(0, 0);
-    this.rideDirection = 1;
-    this._wantsAttach = false;
-  }
 }

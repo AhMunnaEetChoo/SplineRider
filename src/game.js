@@ -23,7 +23,6 @@ export class Game {
     this.onWin = null;
     this.onDeath = null;
     this.onStateChange = null;
-    this.onReset = null;
     this.onPhaseChange = null;
 
     this.loadLevel(levelData || DEFAULT_LEVEL);
@@ -93,7 +92,6 @@ export class Game {
     // Reset (works in all phases)
     if (input.consumeJustPressed('r')) {
       this.loadLevel(this.levelData);
-      if (this.onReset) this.onReset();
       return;
     }
 

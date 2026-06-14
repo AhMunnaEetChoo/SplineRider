@@ -409,8 +409,4 @@ export class UIManager {
     const btn = document.getElementById('btn-toggle-mode');
     if (btn) btn.textContent = labels[mode] || mode;
   }
-
-  updateHUD() {
-    // HUD is updated in main.js tick
-  }
 }

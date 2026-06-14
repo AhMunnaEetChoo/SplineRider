@@ -245,7 +245,7 @@ export class Renderer {
 
     for (let pi = 0; pi < s.points.length; pi++) {
       const pt = s.points[pi];
-      dots[pi].position.set(pt.x, pt.y, 0.03);
+      dots[pi].position.set(pt.x, pt.y, 10);
     }
   }
 
