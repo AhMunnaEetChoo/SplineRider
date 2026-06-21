@@ -21,7 +21,15 @@ const LAUNCH_T_GAP = 0.3;    // after launch, ignore re-attach within this t of 
 // for the whole attachment, so a curving spline doesn't twist the spring feel.
 // Express tuning as frequency + damping ratio.
 const SPRING_FREQ = 1.0;     // Hz — lower = bigger, slower boings
-const SPRING_DAMPING = 0.1;  // damping ratio ζ (0 = lossless, 1 = critical)
+const SPRING_DAMPING = 0.1;  // damping ratio ζ (0 = lossless, 1 = critical). Lower this
+                             // toward 0 for a stronger/longer-lived perpendicular kick-back
+                             // on a well-timed release (it governs the on-rail spring decay).
+// Strength of the directional spring ↔ travel coupling (see _updateRiding). The loaded
+// spring's force, projected onto the (curving) rail tangent, speeds you up or slows you
+// down depending on which way the rail turns; it's a pure diode (the spring can only lose
+// energy this way — braking bleeds to heat, never winds the spring up). 0 = off (pure
+// perpendicular spring). Main feel dial.
+const SPRING_TURN_COUPLING = 1.0;
 const _SPRING_OMEGA = 2 * Math.PI * SPRING_FREQ;
 // Exported so the renderer can continue the same spring as a detached visual
 // settle animation after launch (gameplay vs visuals share one decay law).
@@ -167,19 +175,44 @@ export class Player {
       return;
     }
 
-    // Spring (normal axis) — independent of tangential motion
+    // Spring (normal axis) — its own damped oscillation, independent of travel.
     this._updateSpring(dt);
+
+    // Directional spring ↔ travel coupling. The loaded spring pushes the bead along its
+    // fixed axis; the component of that push ALONG the rail tangent speeds you up or slows
+    // you down depending on which way the rail turns. On a straight rail the axis stays
+    // perpendicular (proj = 0) so there's no coupling — a well-timed release still kicks
+    // you back. Diode: a boost draws its energy FROM the spring (clamped to what it holds);
+    // a brake bleeds tangential energy to heat and leaves the spring untouched, so the
+    // spring can only ever lose energy here — turning never winds springiness up.
+    const tangent = this.spline.tangentAt(this.t);
+    const tlen = tangent.length();
+    const tangentDir = tlen > 1e-6 ? tangent.clone().divideScalar(tlen) : null;
+    if (tangentDir && this.dispN !== 0) {
+      const proj = this.springAxis.dot(tangentDir);                // 0 on a straight rail
+      const s0 = this.speed;
+      const s1 = s0 + (-SPRING_K * this.dispN * proj) * SPRING_TURN_COUPLING * dt;
+      const dKE = 0.5 * (s1 * s1 - s0 * s0);
+      if (dKE > 0) {
+        const Es = 0.5 * (this.velN * this.velN + SPRING_K * this.dispN * this.dispN);
+        const give = Math.min(dKE, Es);
+        const scale = Es > 1e-9 ? Math.sqrt(Math.max(0, (Es - give) / Es)) : 0;
+        this.velN *= scale;
+        this.dispN *= scale;
+        this.speed = give < dKE
+          ? Math.sign(s0 || this.rideDirection) * Math.sqrt(s0 * s0 + 2 * give)
+          : s1;
+      } else {
+        this.speed = s1;  // brake → energy to heat, spring left alone (no wind-up)
+      }
+    }
 
     // Auto-accelerate in the locked direction
     this.speed += ACCELERATION * this.rideDirection * dt;
 
-    // Gravity tangent projection
-    const tangent = this.spline.tangentAt(this.t);
-    const tlen = tangent.length();
-    if (tlen > 0.0001) {
-      const tangentDir = tangent.clone().divideScalar(tlen);
-      const gravTangent = -GRAVITY * tangentDir.y;
-      this.speed += gravTangent * dt;
+    // Gravity tangent projection (reuses the tangent computed above)
+    if (tangentDir) {
+      this.speed += -GRAVITY * tangentDir.y * dt;
     }
 
     // Drag
