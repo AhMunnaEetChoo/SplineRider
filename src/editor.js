@@ -30,6 +30,10 @@ export class Editor {
     // Callbacks (set by main.js)
     this.onSelectionChange = null;
     this.onModeChange = null;
+    // Fired (possibly liberally) whenever the level content may have changed.
+    // The consumer re-derives a content hash to decide what actually changed,
+    // so spurious fires (e.g. after a pan) are harmless.
+    this.onModified = null;
 
     // Bound handlers
     this._onMouseDown = this._onMouseDown.bind(this);
@@ -54,6 +58,7 @@ export class Editor {
     this._knotPlacingIndex = -1;
     this._rebuildView();
     this.renderer.frameCamera(this.startPosition, this.goalPosition);
+    this._notifyModified();
   }
 
   loadLevel(levelData) {
@@ -73,6 +78,7 @@ export class Editor {
     this._knotPlacingIndex = -1;
     this._rebuildView();
     this.renderer.frameCamera(this.startPosition, this.goalPosition);
+    this._notifyModified();
   }
 
   getLevelData() {
@@ -125,6 +131,7 @@ export class Editor {
     this.mode = modes[(idx + 1) % modes.length];
     this.dragState = null;
     if (this.onModeChange) this.onModeChange(this.mode);
+    this._notifyModified();
   }
 
   update() {
@@ -206,6 +213,7 @@ export class Editor {
       this.selectedSplineIndex = -1;
       this._notifySelectionChange();
       this._rebuildView();
+      this._notifyModified();
     }
   }
 
@@ -220,6 +228,7 @@ export class Editor {
     this._knotPlacingIndex = -1;
     this._notifySelectionChange();
     this._rebuildView();
+    this._notifyModified();
   }
 
   // ---- Internal ----
@@ -239,6 +248,12 @@ export class Editor {
   _notifySelectionChange() {
     if (this.onSelectionChange) {
       this.onSelectionChange(this.selectedSplineIndex);
+    }
+  }
+
+  _notifyModified() {
+    if (this.onModified) {
+      this.onModified();
     }
   }
 
@@ -509,6 +524,21 @@ export class Editor {
       }
     }
 
+    // Freehand draw — the first click shows a point for feedback, but if the
+    // drag never reached DRAW_MIN_DIST the spline is still a lone point (a
+    // click/release in roughly the same spot). Discard it rather than leave a
+    // degenerate 1-point spline. (Extending an existing spline can't hit this:
+    // those splines already have ≥2 points.)
+    if (ds && ds.type === 'drawing') {
+      const s = this.splines[ds.splineIndex];
+      if (s && s.points.length < 2) {
+        this.splines.splice(ds.splineIndex, 1);
+        this.selectedSplineIndex = -1;
+        this._notifySelectionChange();
+        this._rebuildView();
+      }
+    }
+
     // Knots mode: long press to finish, normal click to place point
     if (this.mode === 'knots' && this._knotMouseDownWorld && !ds) {
       const duration = performance.now() - this._knotMouseDownTime;
@@ -542,6 +572,9 @@ export class Editor {
 
     this.dragState = null;
     this.renderer.setEditorKnotHighlight(-1, -1);
+    // Any non-pan interaction may have changed level content (pan returns early
+    // above). The consumer hashes to confirm, so over-firing here is harmless.
+    this._notifyModified();
   }
 
   // ---- Touch events ----

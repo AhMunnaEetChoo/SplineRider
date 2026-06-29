@@ -1,9 +1,19 @@
+// Keys are tracked at the window level and preventDefault'd to stop the page
+// scrolling etc. while playing — but that must not swallow text typed into form
+// fields (search box, import textarea), so editable targets are left alone.
+function _isEditableTarget(target) {
+  if (!target) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
+}
+
 export class Input {
   constructor() {
     this.keys = {};
     this.justPressed = {};
 
     this._onKeyDown = (e) => {
+      if (_isEditableTarget(e.target)) return;
       if (!this.keys[e.key]) {
         this.justPressed[e.key] = true;
       }
@@ -12,6 +22,7 @@ export class Input {
     };
 
     this._onKeyUp = (e) => {
+      if (_isEditableTarget(e.target)) return;
       this.keys[e.key] = false;
       e.preventDefault();
     };

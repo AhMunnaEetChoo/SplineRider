@@ -7,6 +7,7 @@ import { UIManager } from './ui.js';
 import { Editor } from './editor.js';
 import { Effects } from './effects.js';
 import * as storage from './storage.js';
+import * as online from './online.js';
 import { BUILT_IN_LEVELS, DEFAULT_LEVEL } from './levels.js';
 import { initColors } from './colors.js';
 
@@ -22,6 +23,10 @@ editor.onSelectionChange = (splineIndex) => {
 };
 editor.onModeChange = (mode) => {
   ui.setModeLabel(mode);
+};
+editor.onModified = () => {
+  // Any content change may invalidate the test-play proof; re-derive enablement.
+  _refreshUploadButton();
 };
 const effects = new Effects(renderer.scene);
 const game = new Game();
@@ -47,11 +52,49 @@ const composedInput = {
 };
 
 // ---- Screen State ----
-const SCREENS = { START: 'start', PLAY: 'play', EDITOR: 'editor', LEVELS: 'levels' };
+const SCREENS = { START: 'start', PLAY: 'play', EDITOR: 'editor', LEVELS: 'levels', ONLINE: 'online' };
 let currentScreen = SCREENS.START;
 let currentLevelData = DEFAULT_LEVEL;
 let isTestPlay = false;
 let _savedEditorCamera = null;
+
+// Upload gate: the content key of the level last beaten in test-play, plus the
+// proven completion time. Upload is only enabled while the editor's current
+// content matches this snapshot (see _refreshUploadButton / editor.onModified).
+let provenLevelKey = null;
+let provenTimeMs = null;
+// Author drill-down filter on the Browse Online screen.
+let _onlineAuthorFilter = null;
+
+const AUTHOR_NAME_KEY = 'splineRider_authorName';
+
+// Name-independent snapshot of level content; used to detect edits that should
+// invalidate a test-play proof.
+function _levelContentKey(data) {
+  if (!data) return null;
+  return JSON.stringify({
+    splines: data.splines,
+    startPosition: data.startPosition,
+    goalPosition: data.goalPosition,
+  });
+}
+
+function _refreshUploadButton() {
+  const current = _levelContentKey(editor.getLevelData());
+  ui.setUploadEnabled(provenLevelKey !== null && current === provenLevelKey);
+}
+
+function _getAuthorName() {
+  try { return localStorage.getItem(AUTHOR_NAME_KEY) || ''; } catch { return ''; }
+}
+
+function _setAuthorName(name) {
+  try { localStorage.setItem(AUTHOR_NAME_KEY, name); } catch { /* ignore */ }
+}
+
+function _storeEditToken(id, token) {
+  try { localStorage.setItem('splineRider_editToken_' + id, token); } catch { /* ignore */ }
+}
 
 const FIXED_DT = 1 / 60;
 const MAX_FRAME_TIME = 0.1;
@@ -77,6 +120,7 @@ function showScreen(id, data) {
   } else if (id === 'editor') {
     resetFrameAccumulator();
     editor.activate();
+    _refreshUploadButton();
   }
 }
 
@@ -98,6 +142,10 @@ game.onWin = (time) => {
   const bestTime = storage.getBestTime(levelName);
 
   if (isTestPlay) {
+    // The author just proved this exact level is beatable — record the content
+    // snapshot + time so Upload can be unlocked (until the level is edited).
+    provenLevelKey = _levelContentKey(currentLevelData);
+    provenTimeMs = time * 1000;
     setTimeout(() => {
       _restoreEditorCamera();
       showScreen('editor');
@@ -151,6 +199,14 @@ game.onStateChange = (newState) => {
 // Start screen
 ui.on('btn-start-play', () => {
   _showLevelSelect();
+});
+
+ui.on('btn-start-online', () => {
+  _showOnlineBrowse();
+});
+
+ui.on('btn-online-back', () => {
+  showScreen('start');
 });
 
 ui.on('btn-start-editor', () => {
@@ -291,6 +347,38 @@ ui.on('btn-import-level', () => {
   });
 });
 
+ui.on('btn-upload-level', () => {
+  const data = editor.getLevelData();
+  // Guard even though the button is disabled when the proof is invalid.
+  if (provenLevelKey === null || _levelContentKey(data) !== provenLevelKey) {
+    ui.showToast('Beat the level in Test mode first');
+    return;
+  }
+  if (!online.isConfigured()) {
+    ui.showToast('Online uploads are not configured yet');
+    return;
+  }
+
+  // Ensure a level name, then an author name (persisted locally), then upload.
+  const withName = (next) => {
+    if (data.name && data.name.trim()) { next(data.name.trim()); return; }
+    ui.promptForText('Level name:', 'My Level', next);
+  };
+  const withAuthor = (next) => {
+    const saved = _getAuthorName();
+    if (saved) { next(saved); return; }
+    ui.promptForText('Your author name (shown publicly):', '', (a) => {
+      _setAuthorName(a);
+      next(a);
+    });
+  };
+
+  withName((name) => {
+    data.name = name;
+    withAuthor((author) => _doUpload(name, author, data));
+  });
+});
+
 ui.on('btn-test-level', () => {
   const data = editor.getLevelData();
   data.name = data.name || 'Test Level';
@@ -358,9 +446,90 @@ function _showLevelSelect() {
   });
 }
 
+// ---- Online catalog ----
+
+async function _doUpload(name, author, data) {
+  ui.showToast('Uploading…');
+  try {
+    const { id, edit_token } = await online.uploadLevel({
+      name, author, data, authorTimeMs: provenTimeMs,
+    });
+    if (edit_token) _storeEditToken(id, edit_token);
+    const url = `${location.origin}${location.pathname}?level=${id}`;
+    ui.showShareModal(url);
+  } catch (e) {
+    console.warn('Upload failed', e);
+    ui.showToast('Upload failed. Check your connection.');
+  }
+}
+
+function _showOnlineBrowse() {
+  _onlineAuthorFilter = null;
+  // Use the local showScreen (not ui.showScreen) so module-level currentScreen
+  // becomes 'online' — _loadOnlineList guards rendering on it.
+  showScreen('online', {
+    onSearch: (term) => {
+      // Typing a search clears any active author filter.
+      _onlineAuthorFilter = null;
+      ui.setOnlineFilterLabel(null);
+      _loadOnlineList({ search: term });
+    },
+    onSelect: (level) => _playOnlineLevel(level.id),
+    onSelectAuthor: (author) => {
+      _onlineAuthorFilter = author;
+      ui.setOnlineFilterLabel(author, () => {
+        _onlineAuthorFilter = null;
+        ui.setOnlineFilterLabel(null);
+        _loadOnlineList({});
+      });
+      _loadOnlineList({ author });
+    },
+  });
+  _loadOnlineList({});
+}
+
+async function _loadOnlineList(opts) {
+  if (!online.isConfigured()) {
+    ui.showOnlineMessage('Online levels are not configured yet.');
+    return;
+  }
+  ui.showOnlineMessage('Loading…');
+  try {
+    const levels = await online.listLevels(opts);
+    if (currentScreen !== 'online') return; // user navigated away mid-request
+    ui.renderOnlineList(levels);
+  } catch (e) {
+    console.warn('Failed to load online levels', e);
+    if (currentScreen === 'online') {
+      ui.showOnlineMessage('Could not load levels. Check your connection.');
+    }
+  }
+}
+
+async function _playOnlineLevel(id) {
+  ui.showToast('Loading level…');
+  try {
+    const result = await online.getLevel(id);
+    currentLevelData = result.level;
+    isTestPlay = false;
+    game.loadLevel(currentLevelData);
+    showScreen('play');
+  } catch (e) {
+    console.warn('Failed to load level', e);
+    ui.showToast('Could not load that level.');
+  }
+}
+
 // ---- Initial ----
 renderer.showGameView(game.splines, game.goalPosition, currentLevelData.startPosition);
 showScreen('start');
+
+// Shareable deep-link: ?level=<id> loads straight into that community level,
+// falling back to the start screen on any failure.
+const _deepLinkLevelId = new URLSearchParams(location.search).get('level');
+if (_deepLinkLevelId) {
+  _playOnlineLevel(_deepLinkLevelId);
+}
 
 // ---- Game Loop ----
 function tick() {

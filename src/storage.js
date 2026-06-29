@@ -116,18 +116,28 @@ export function importLevelJson(jsonString) {
   if (!Array.isArray(data.splines) || data.splines.length === 0) {
     throw new Error('Invalid level data: missing or empty splines array');
   }
+  const cleanSplines = [];
   for (let i = 0; i < data.splines.length; i++) {
     const s = data.splines[i];
-    if (!Array.isArray(s.points) || s.points.length < 2) {
-      throw new Error(`Invalid level data: spline ${i} missing or too few points`);
+    if (!Array.isArray(s.points)) {
+      throw new Error(`Invalid level data: spline ${i} missing points array`);
     }
+    // Drop degenerate splines — a stray single-point click in the editor leaves
+    // a 1-point spline that forms no rideable Catmull-Rom curve. Skip rather
+    // than reject, so otherwise-valid levels still load.
+    if (s.points.length < 2) continue;
     for (let j = 0; j < s.points.length; j++) {
       const p = s.points[j];
       if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') {
         throw new Error(`Invalid level data: spline ${i} point ${j} invalid`);
       }
     }
+    cleanSplines.push(s);
   }
+  if (cleanSplines.length === 0) {
+    throw new Error('Invalid level data: no valid splines (need at least 2 points each)');
+  }
+  data.splines = cleanSplines;
   if (!data.goalPosition || typeof data.goalPosition.x !== 'number' || typeof data.goalPosition.y !== 'number') {
     const last = data.splines[data.splines.length - 1];
     const lastPt = last.points[last.points.length - 1];

@@ -60,6 +60,7 @@ export class UIManager {
       el('div', { style: this._titleStyle }, 'Spline Rider'),
       el('div', { style: this._subtitleStyle }, 'Ride the curves. Reach the goal.'),
       this._btn('Play', 'btn-start-play'),
+      this._btn('Browse Online', 'btn-start-online'),
       this._btn('Editor', 'btn-start-editor'),
     );
     document.body.appendChild(this.screens.start);
@@ -71,6 +72,34 @@ export class UIManager {
       this._btn('Back', 'btn-levels-back'),
     );
     document.body.appendChild(this.screens.levels);
+
+    // Online Browse Screen
+    this.screens.online = el('div', { id: 'screen-online', style: this._overlayStyle },
+      el('div', { style: this._subtitleStyle }, 'Community Levels'),
+      el('input', {
+        id: 'online-search',
+        type: 'text',
+        placeholder: 'Search name or author…',
+        style: `width:300px; padding:8px 10px; margin-bottom:10px; font-family:monospace;`
+          + ` font-size:14px; color:${C.text}; background:${C.rgba(C.text, 0.08)};`
+          + ` border:1px solid ${C.rgba(C.text, 0.3)}; border-radius:4px;`,
+      }),
+      el('div', { id: 'online-filter', style: `font-size:13px; color:${this._dimText}; margin-bottom:6px; display:none;` }),
+      el('div', { id: 'online-list', style: 'max-height:48vh; overflow-y:auto; width:340px;' }),
+      this._btn('Back', 'btn-online-back'),
+    );
+    document.body.appendChild(this.screens.online);
+
+    // Debounced search input → handler set per showScreen('online').
+    this._onlineSearchHandler = null;
+    this._onlineSearchTimer = null;
+    document.getElementById('online-search').addEventListener('input', (e) => {
+      const value = e.target.value;
+      if (this._onlineSearchTimer) clearTimeout(this._onlineSearchTimer);
+      this._onlineSearchTimer = setTimeout(() => {
+        if (this._onlineSearchHandler) this._onlineSearchHandler(value);
+      }, 300);
+    });
 
     // Win Screen
     this.screens.win = el('div', { id: 'screen-win', style: this._overlayStyle },
@@ -123,6 +152,7 @@ export class UIManager {
           el('button', { id: 'btn-load-level', textContent: 'Load', style: this._tbStyle }),
           el('button', { id: 'btn-export-level', textContent: 'Export', style: this._tbStyle }),
           el('button', { id: 'btn-import-level', textContent: 'Import', style: this._tbStyle }),
+          el('button', { id: 'btn-upload-level', textContent: 'Upload', style: this._tbStyle, title: 'Beat the level in Test to enable' }),
         )
       ),
 
@@ -131,6 +161,7 @@ export class UIManager {
     );
     document.body.appendChild(this.editorToolbar);
     document.getElementById('btn-delete-spline').disabled = true;
+    document.getElementById('btn-upload-level').disabled = true;
 
     // Dropdown toggle + outside-click close
     const moreBtn = document.getElementById('btn-more-menu');
@@ -172,6 +203,44 @@ export class UIManager {
       )
     );
     document.body.appendChild(this._importModal);
+
+    // Share modal (shown after a successful upload)
+    this._shareModal = el('div', {
+      style: `display:none; position:absolute; top:0; left:0; width:100%; height:100%; z-index:20; pointer-events:all;`
+        + ` background:${C.rgba(C.bg, 0.6)};`
+    },
+      el('div', {
+        style: `position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);`
+          + ` background:${C.bgSecondary}; padding:20px; border-radius:8px; text-align:center;`
+          + ` border:1px solid ${C.rgba(C.text, 0.25)}; max-width:90%;`
+      },
+        el('div', { style: `color:${C.highlight}; font-family:monospace; font-size:18px; margin-bottom:6px;` }, 'Level uploaded!'),
+        el('div', { style: `color:${C.text}; font-family:monospace; font-size:13px; margin-bottom:10px;` }, 'Share this link with friends:'),
+        el('input', {
+          id: 'share-url',
+          type: 'text',
+          readOnly: true,
+          style: `width:360px; max-width:80vw; padding:8px; background:${C.bg}; color:${C.text};`
+            + ` font-family:monospace; font-size:12px; border:1px solid ${C.rgba(C.text, 0.25)};`
+            + ` border-radius:4px; text-align:center;`
+        }),
+        el('div', { style: 'display:flex; gap:8px; margin-top:12px; justify-content:center;' },
+          this._btn('Copy Link', 'btn-share-copy'),
+          this._btn('Done', 'btn-share-close'),
+        )
+      )
+    );
+    document.body.appendChild(this._shareModal);
+
+    document.getElementById('btn-share-close').addEventListener('click', () => {
+      this._shareModal.style.display = 'none';
+    });
+    document.getElementById('btn-share-copy').addEventListener('click', () => {
+      const url = document.getElementById('share-url').value;
+      navigator.clipboard.writeText(url)
+        .then(() => this.showToast('Link copied'))
+        .catch(() => this.showToast('Copy failed — select the link manually'));
+    });
 
     // Toast
     this._toast = el('div', {
@@ -291,6 +360,15 @@ export class UIManager {
     if (id === 'levels') {
       this._populateLevelList(data);
     }
+
+    if (id === 'online') {
+      this._onlineSearchHandler = data && data.onSearch;
+      this._onlineCallbacks = data
+        ? { onSelect: data.onSelect, onSelectAuthor: data.onSelectAuthor }
+        : {};
+      document.getElementById('online-search').value = '';
+      this.setOnlineFilterLabel(null);
+    }
   }
 
   _populateLevelList(data) {
@@ -357,6 +435,84 @@ export class UIManager {
     }
   }
 
+  // ---- Online browse ----
+
+  _formatDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleDateString();
+  }
+
+  setOnlineFilterLabel(author, onClear) {
+    const lbl = document.getElementById('online-filter');
+    if (!lbl) return;
+    if (!author) {
+      lbl.style.display = 'none';
+      lbl.innerHTML = '';
+      return;
+    }
+    lbl.innerHTML = '';
+    lbl.style.display = 'block';
+    lbl.appendChild(document.createTextNode('Showing levels by ' + author + ' · '));
+    const clear = el('span', {
+      style: `cursor:pointer; color:${Colors.accent}; text-decoration:underline;`,
+      textContent: 'Clear',
+    });
+    clear.addEventListener('click', () => onClear && onClear());
+    lbl.appendChild(clear);
+  }
+
+  showOnlineMessage(msg) {
+    const list = document.getElementById('online-list');
+    if (!list) return;
+    list.innerHTML = '';
+    list.appendChild(el('div', { style: `color:${this._dimText}; padding:10px;` }, msg));
+  }
+
+  renderOnlineList(levels) {
+    const list = document.getElementById('online-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const C = Colors;
+    const cbs = this._onlineCallbacks || {};
+
+    if (!levels || levels.length === 0) {
+      this.showOnlineMessage('No levels found.');
+      return;
+    }
+
+    for (const level of levels) {
+      const row = el('div', {
+        style: `display:flex; justify-content:space-between; align-items:center; padding:10px;`
+          + ` margin:4px 0; background:${C.rgba(C.text, 0.05)}; border-radius:4px; cursor:pointer;`,
+      });
+
+      const author = el('span', {
+        style: `color:${C.accent}; text-decoration:underline; cursor:pointer;`,
+        textContent: level.author || 'anon',
+      });
+      author.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cbs.onSelectAuthor && cbs.onSelectAuthor(level.author);
+      });
+
+      const info = el('div', {},
+        el('div', { style: `font-size:16px; color:${C.text};` }, level.name || 'Untitled'),
+        el('div', { style: `font-size:12px; color:${this._dimText}; margin-top:2px;` },
+          'by ', author, ' · ' + this._formatDate(level.created_at)),
+      );
+
+      row.appendChild(info);
+      row.addEventListener('click', () => cbs.onSelect && cbs.onSelect(level));
+      list.appendChild(row);
+    }
+  }
+
+  showShareModal(url) {
+    document.getElementById('share-url').value = url;
+    this._shareModal.style.display = 'block';
+  }
+
   showImportModal(onConfirm) {
     this._importModal.style.display = 'block';
     document.getElementById('import-textarea').value = '';
@@ -393,14 +549,23 @@ export class UIManager {
   }
 
   promptForName(defaultName, callback) {
-    const name = prompt('Level name:', defaultName);
-    if (name && name.trim()) {
-      callback(name.trim());
+    this.promptForText('Level name:', defaultName, callback);
+  }
+
+  promptForText(message, defaultValue, callback) {
+    const value = prompt(message, defaultValue);
+    if (value && value.trim()) {
+      callback(value.trim());
     }
   }
 
   setDeleteEnabled(enabled) {
     const btn = document.getElementById('btn-delete-spline');
+    if (btn) btn.disabled = !enabled;
+  }
+
+  setUploadEnabled(enabled) {
+    const btn = document.getElementById('btn-upload-level');
     if (btn) btn.disabled = !enabled;
   }
 
