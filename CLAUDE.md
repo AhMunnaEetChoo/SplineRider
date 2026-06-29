@@ -37,15 +37,16 @@ src/
 ├── renderer.js   # Three.js scene setup, dual-mode (game/editor) rendering
 ├── input.js      # Keyboard state tracking with justPressed support
 ├── touch.js      # Mouse/touch input provider (same interface as input.js)
-├── ui.js         # DOM screen manager (start, win, death, pause, level select, editor toolbar)
+├── ui.js         # DOM screen manager (start, win, death, pause, level select, browse online, editor toolbar)
 ├── editor.js     # Click-and-drag level editor (canvas mouse/touch handlers)
-├── storage.js    # localStorage CRUD for levels and best times
+├── storage.js    # localStorage CRUD for levels and best times; level JSON validate/normalize
+├── online.js     # Online community level catalog: Supabase-backed list/get/upload (the only networking layer)
 ├── levels.js     # Built-in level loader: async-fetches levels/index.json + each level file
 ├── colors.js     # Palette loaded from Art/vintage-voltage.hex; sets CSS vars + JS color helpers
 └── effects.js    # Particle effects system (THREE.Points + additive blending)
 ```
 
-**Module dependency order:** `spline.js`, `input.js`, `touch.js`, and `colors.js` have no internal deps. `player.js` imports `spline.js`. `renderer.js` imports `spline.js` and `colors.js`. `game.js` imports `player.js`, `spline.js`, and `levels.js`. `editor.js` imports `spline.js` and is driven by a `renderer` handle passed in. `main.js` wires everything together — nothing imports from `main.js` (though it exports `renderer`).
+**Module dependency order:** `spline.js`, `input.js`, `touch.js`, and `colors.js` have no internal deps. `player.js` imports `spline.js`. `renderer.js` imports `spline.js` and `colors.js`. `game.js` imports `player.js`, `spline.js`, and `levels.js`. `editor.js` imports `spline.js` and is driven by a `renderer` handle passed in. `online.js` imports `storage.js` (reuses `importLevelJson` to validate remote levels). `main.js` wires everything together — nothing imports from `main.js` (though it exports `renderer`).
 
 Note: `levels.js` and `colors.js` both run top-level `await` at import time (level fetch, palette fetch), so `main.js` awaits `initColors()` before constructing anything.
 
@@ -62,8 +63,8 @@ Note: `levels.js` and `colors.js` both run top-level `await` at import time (lev
 - **The world is 2D** but built on Three.js for rendering. The orthographic camera looks down the Z axis; everything lives near z=0.
 - **Levels are stored** as plain data — see schema below — and deserialized to `Spline` instances at load time in `game.js`.
 - **The renderer has two modes**: game view (one tube mesh per spline) and editor view (one tube mesh per spline plus draggable knot dots). Only one view group is attached to the scene at a time.
-- **Input is composed**: keyboard (`input.js`) + mouse/touch (`touch.js`) wrapped into a single provider in `main.js` with a matching `isDown` / `consumeJustPressed` interface. The logical `'hold'` key maps to space or touch-hold.
-- **Screens**: START → PLAY | EDITOR | LEVELS. PLAY → WIN | DEATH | PAUSE. The editor has a test-play mode that returns to the editor on win/death.
+- **Input is composed**: keyboard (`input.js`) + mouse/touch (`touch.js`) wrapped into a single provider in `main.js` with a matching `isDown` / `consumeJustPressed` interface. The logical `'hold'` key maps to space or touch-hold. `input.js` `preventDefault`s keys globally, but **skips events whose target is an editable element** (`<input>`/`<textarea>`/contenteditable) so typing into the browse-search box and import textarea works.
+- **Screens**: START → PLAY | EDITOR | LEVELS | ONLINE. PLAY → WIN | DEATH | PAUSE. The editor has a test-play mode that returns to the editor on win/death. `main.js` owns a module-level `currentScreen`; **always route through the local `showScreen(id)` (not `ui.showScreen` directly)** when a screen's logic depends on `currentScreen` (e.g. ONLINE's async render guard).
 
 ## Level JSON schema
 
@@ -84,3 +85,15 @@ Levels are plain JSON, both in `levels/*.json` (built-in) and localStorage (user
 - `startPosition` is where the particle spawns; `goalPosition` is the goal ring (win within `WIN_RADIUS = 40`).
 - **Legacy:** older saves used `startSplineIndex` + `startT` instead of `startPosition`; `storage._normalizeLevelData` migrates these on load. New code should only emit `startPosition`.
 - `levels/index.json` is the manifest — an array of filenames. **A level file must be listed there to be loaded** as a built-in. The first entry is `DEFAULT_LEVEL`.
+- **Validation/cleanup** lives in `storage.importLevelJson` (used for clipboard import *and* for ingesting online levels). It **drops degenerate splines with `<2` points** (a stray single-point editor click) rather than rejecting the whole level, derives a missing `goalPosition` from the last point, and runs `_normalizeLevelData`. The editor also discards a freehand spline if the click is released in place before reaching drag distance (`editor.js` `_onMouseUp`), so 1-point splines are avoided at the source too.
+
+## Online level catalog
+
+Players can publish levels to a shared catalog and play/search others' levels. The site is **static (GitHub Pages) — there is no backend to extend**, so the catalog lives in **Supabase** (hosted Postgres + auto REST API), reached directly from the browser.
+
+- **`src/online.js` is the only networking layer.** It exposes `listLevels({search, author})`, `getLevel(id)`, `uploadLevel({name, author, data, authorTimeMs})`, and `isConfigured()`. `SUPABASE_URL` + `SUPABASE_ANON_KEY` are plain constants at the top (the anon key is public by design; row-level security gates it to public read + insert only). supabase-js is loaded via a **lazy dynamic `import()`** (mapped in `index.html`'s import map) so a CDN/network failure degrades gracefully instead of breaking the app — online buttons just toast an error.
+- **Backend setup is documented in `Documentation/online-levels-setup.md`** (table DDL, RLS policies, trigram search index). The `levels` table adds columns the local JSON doesn't have: server-generated `id` (the canonical identity — names are display-only), `author`, `created_at`, `author_time_ms`, and a reserved-but-unused `edit_token`. The level geometry itself is stored in a `data` jsonb column in the same shape as the JSON schema above.
+- **Upload is gated on proof-of-completion.** The editor has no dirty-tracking by default, so an `editor.onModified` callback (fired liberally from every mutation path) lets `main.js` compare a name-independent content key (`_levelContentKey`) against `provenLevelKey`. Beating the level in **test-play** (`game.onWin`'s `isTestPlay` branch) records that key + the time; any edit changes the key and disables the Upload button (`ui.setUploadEnabled`). The gate is an honesty mechanism, **not security** — it's client-side and bypassable.
+- **Browse Online** (`ui.js` `online` screen) lists name/author/date, has a debounced search matching name OR author, and an author drill-down. `main.js` `_showOnlineBrowse` / `_loadOnlineList` / `_playOnlineLevel` drive it. Remote levels are validated through `importLevelJson` before play.
+- **Share links** are `?level=<id>`. On startup `main.js` reads the param and, if present, loads that level straight into play (graceful fallback to the start screen on failure). Upload shows a share modal with copy-to-clipboard.
+- **Author identity** is just a local display name in `localStorage` (`splineRider_authorName`) — no accounts. Clashes/spoofing and lack of moderation are accepted MVP trade-offs.
